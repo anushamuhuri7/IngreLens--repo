@@ -14,7 +14,13 @@ import {
   Sparkles,
   ShieldCheck,
   Search,
-  Aperture
+  Aperture,
+  AlertTriangle,
+  CalendarDays,
+  ShieldAlert,
+  PackageCheck,
+  Info,
+  Stethoscope
 } from 'lucide-react'
 import scanReference from '../assets/Gemini_Generated_Image_oedrlaoedrlaoedr.png'
 import logoImage from '../assets/Your_paragraph_text-removebg-preview.png'
@@ -36,6 +42,17 @@ function saveUsers(users) {
 
 function createUserId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function getExpiryStatus(expiryDate) {
+  if (!expiryDate) return { label: 'Expiry date could not be detected', tone: 'yellow' }
+  const today = new Date()
+  const expiry = new Date(`${expiryDate}T23:59:59`)
+  if (Number.isNaN(expiry.getTime())) return { label: 'Expiry date could not be detected', tone: 'yellow' }
+  const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
+  if (daysUntilExpiry < 0) return { label: 'Expired', tone: 'red' }
+  if (daysUntilExpiry <= 90) return { label: 'Expires soon', tone: 'yellow' }
+  return { label: 'Not expired', tone: 'green' }
 }
 
 function Avatar({ name, image, size = 'default' }) {
@@ -503,7 +520,7 @@ function LiveCameraView({ mode, onScanComplete, onBack }) {
 }
 
 // --- Scan Results Screen (/results) ---
-function ScanResultsScreen({ item, mode, onBack, onSave }) {
+function ScanResultsScreen({ item, mode, userProfile, onBack, onSave }) {
   const defaultFoodResult = {
     modeName: 'Food Example',
     itemName: 'Harvest Oat Granola',
@@ -523,12 +540,28 @@ function ScanResultsScreen({ item, mode, onBack, onSave }) {
     itemName: 'Paracetamol 500 mg',
     score: 9,
     summary: 'Commonly used for temporary relief of pain and fever when taken as directed.',
+    activeIngredient: 'Paracetamol (acetaminophen)',
     strength: '500 mg per tablet',
     category: 'Analgesic and antipyretic',
     uses: 'Temporary relief of mild to moderate pain and fever.',
+    manufacturer: 'Demo Pharmaceuticals Ltd.',
+    dosageForm: 'Tablet',
+    route: 'Oral',
+    manufacturingDate: '2025-01-15',
+    expiryDate: '2027-12-31',
+    batchNumber: 'PCM5-250115',
+    packaging: 'Name, strength, batch, and dates detected on the demo label.',
+    barcodeStatus: 'Not available in demo scan',
+    verificationStatus: 'Verification information available',
+    verificationNote: 'Demo verification — authenticity could not be independently confirmed.',
+    informationAvailable: true,
     dosage: 'Adults and children 12 years and over: 1–2 tablets every 4–6 hours as needed. Do not exceed the dose stated on the package.',
     warnings: 'Do not take with other medicines containing paracetamol. Ask a doctor or pharmacist before use if you have liver disease, drink alcohol regularly, or are taking other medicines.',
+    contraindications: 'Do not use if allergic to paracetamol or any listed ingredient. Check with a healthcare professional if you have severe liver problems.',
+    allergyIngredients: ['paracetamol'],
+    interactions: 'May interact with other products containing paracetamol and some medicines that affect the liver. Interaction information is limited in this demo.',
     sideEffects: 'Nausea, stomach discomfort, or skin rash may occur. Stop use and seek medical help for signs of an allergic reaction or unusual skin changes.',
+    seriousWarnings: 'Seek medical attention for trouble breathing, swelling of the face or throat, severe rash, or signs of an overdose.',
     storage: 'Store in a cool, dry place below 25°C, away from direct sunlight and out of the reach of children.',
     prescription: 'Usually available without a prescription, but local requirements may vary.'
   }
@@ -553,6 +586,20 @@ function ScanResultsScreen({ item, mode, onBack, onSave }) {
     : defaultFoodResult
 
   const pointerPositionPercent = Math.min(Math.max((resultData.score / 10) * 100, 5), 95)
+  const isMedicineResult = mode === 'MEDICINE'
+  const expiryStatus = isMedicineResult ? getExpiryStatus(resultData.expiryDate) : null
+  const profileAllergies = userProfile?.allergies || []
+  const profileConditions = userProfile?.conditions || []
+  const currentMedicines = userProfile?.currentMedicines || []
+  const allergyAlert = isMedicineResult && profileAllergies.some((allergy) =>
+    resultData.allergyIngredients?.some((ingredient) => ingredient.includes(allergy.toLowerCase()))
+  )
+  const interactionAlert = isMedicineResult && currentMedicines.some((medicine) =>
+    /paracetamol|acetaminophen/i.test(medicine)
+  )
+  const conditionAlert = isMedicineResult && profileConditions.some((condition) =>
+    /liver|kidney/i.test(condition)
+  )
 
   return (
     <div className="screen">
@@ -596,16 +643,44 @@ function ScanResultsScreen({ item, mode, onBack, onSave }) {
 
       {mode === 'MEDICINE' ? (
         <div>
+          <div className={`p-4 rounded-2xl border mb-4 ${expiryStatus.tone === 'red' ? 'bg-[#FFEBEE] border-[#FFCDD2]' : expiryStatus.tone === 'yellow' ? 'bg-[#FFFDE7] border-[#FFF1A8]' : 'bg-[#E8F5E9] border-[#C8E6C9]'}`}>
+            <div className="flex items-center gap-2 font-bold text-sm">
+              {expiryStatus.tone === 'green' ? <CalendarDays size={18} className="text-[#388E3C]" /> : <AlertTriangle size={18} className="text-[#D32F2F]" />}
+              <span>Expiry & Safety: {expiryStatus.label}</span>
+            </div>
+            <p className="text-xs mt-2 text-[#666666]">
+              {expiryStatus.tone === 'red' ? 'Do not use this medicine. Check with a pharmacist or healthcare professional.' : expiryStatus.tone === 'yellow' ? 'Verify the expiry date on the physical packaging before use.' : 'Expiry status is based on the demo package date.'}
+            </p>
+          </div>
+
+          <div className="mb-4 space-y-2">
+            <h3 className="text-sm font-bold text-[#212121]">Safety Alerts</h3>
+            {allergyAlert && <div className="p-3 rounded-xl bg-[#FFEBEE] border border-[#FFCDD2] text-xs"><strong>Allergy Alert</strong><p className="mt-1">This medicine may contain an ingredient you have listed as an allergy. Verify the ingredients and consult a healthcare professional.</p></div>}
+            {interactionAlert && <div className="p-3 rounded-xl bg-[#FFFDE7] border border-[#FFF1A8] text-xs"><strong>Possible medicine interaction</strong><p className="mt-1">This medicine may duplicate {currentMedicines.find((medicine) => /paracetamol|acetaminophen/i.test(medicine))}. Consult a doctor or pharmacist before taking them together.</p></div>}
+            {conditionAlert && <div className="p-3 rounded-xl bg-[#FFFDE7] border border-[#FFF1A8] text-xs"><strong>Possible condition-related risk</strong><p className="mt-1">This medicine may require additional caution with a listed liver or kidney condition. Verify with a doctor or pharmacist.</p></div>}
+            {!allergyAlert && !interactionAlert && !conditionAlert && <div className="p-3 rounded-xl bg-[#F4FAF5] border border-[#E8ECE9] text-xs text-[#666666]">No personalized alert was identified from the optional information provided. Interaction and contraindication information is not complete; verify with a pharmacist.</div>}
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#FFFDE7] border border-[#FFF1A8] mb-4">
+            <div className="flex items-center gap-2 font-bold text-sm"><ShieldAlert size={18} className="text-[#F57C00]" /> Verification information available</div>
+            <p className="text-xs text-[#666666] mt-2">{resultData.verificationNote}</p>
+            <p className="text-xs text-[#666666] mt-1">Verify suspicious medicines with a pharmacist, manufacturer, or official medicine-verification service.</p>
+          </div>
+
           <h3 className="text-sm font-bold text-[#212121] mb-3">Medicine Information</h3>
           <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
             {[
+              ['Active Ingredient', resultData.activeIngredient],
               ['Strength / Dosage', resultData.strength],
               ['Category', resultData.category],
               ['Common Uses', resultData.uses],
+              ['Manufacturer', resultData.manufacturer],
+              ['Dosage Form', resultData.dosageForm],
+              ['Route', resultData.route],
               ['Typical Dosage', resultData.dosage],
-              ['Warnings & Precautions', resultData.warnings],
-              ['Common Side Effects', resultData.sideEffects],
-              ['Storage', resultData.storage],
+              ['Manufacturing Date', resultData.manufacturingDate],
+              ['Expiry Date', resultData.expiryDate],
+              ['Batch / Lot', resultData.batchNumber],
               ['Prescription', resultData.prescription]
             ].map(([label, value]) => (
               <div key={label} className="ingredient-item items-start">
@@ -616,9 +691,37 @@ function ScanResultsScreen({ item, mode, onBack, onSave }) {
               </div>
             ))}
           </div>
-          <p className="text-xs text-[#666666] mt-3">
-            Demo information only. Follow your doctor&apos;s or pharmacist&apos;s advice and the instructions on the actual medicine packaging.
-          </p>
+          <h3 className="text-sm font-bold text-[#212121] mt-5 mb-3">Medicine Verification</h3>
+          <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
+            {[
+              ['Medicine Detected', resultData.itemName],
+              ['Packaging / Label', resultData.packaging],
+              ['Barcode / QR Code', resultData.barcodeStatus],
+              ['Available Status', resultData.verificationStatus]
+            ].map(([label, value]) => <div key={label} className="ingredient-item items-start"><div><div className="eyebrow mb-1">{label}</div><p className="text-sm text-[#212121]">{value}</p></div></div>)}
+          </div>
+
+          <h3 className="text-sm font-bold text-[#212121] mt-5 mb-3">Safety Information</h3>
+          <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
+            {[
+              ['Warnings', resultData.warnings],
+              ['Contraindications', resultData.contraindications],
+              ['Common Side Effects', resultData.sideEffects],
+              ['Storage', resultData.storage],
+              ['Interactions', resultData.interactions]
+            ].map(([label, value]) => <div key={label} className="ingredient-item items-start"><div><div className="eyebrow mb-1">{label}</div><p className="text-sm text-[#212121] leading-relaxed">{value || 'Information unavailable — please check the medicine packaging or consult a pharmacist.'}</p></div></div>)}
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#F4FAF5] border border-[#E8ECE9] mt-5">
+            <h3 className="text-sm font-bold text-[#212121] mb-3">Before Taking This Medicine</h3>
+            {['Check the medicine name and strength', 'Check the expiry date', 'Check that the packaging is intact', 'Check the batch/lot information', 'Check for signs of tampering', 'Make sure it was prescribed/recommended for you when appropriate', 'Check allergies and important interactions', 'Follow dosage instructions from the packaging or healthcare professional'].map((check) => <p key={check} className="text-xs text-[#212121] mb-2"><PackageCheck size={14} className="inline mr-2 text-[#388E3C]" />{check}</p>)}
+          </div>
+          <div className="p-4 rounded-2xl bg-[#FFEBEE] border border-[#FFCDD2] mt-4">
+            <div className="flex items-center gap-2 font-bold text-sm"><Stethoscope size={18} className="text-[#D32F2F]" /> Serious warning signs</div>
+            <p className="text-xs text-[#666666] mt-2">{resultData.seriousWarnings}</p>
+          </div>
+          <p className="text-xs text-[#666666] mt-4"><Info size={14} className="inline mr-1" />Demo information only. This scan cannot confirm that a medicine is safe or genuine.</p>
+          <p className="text-xs text-[#666666] mt-2">This information is for informational purposes only and does not replace advice from a doctor or pharmacist. Always verify the medicine, expiry date, dosage, and packaging before use.</p>
         </div>
       ) : (
         <div>
@@ -654,8 +757,10 @@ function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
     name: profileData.name || '',
     age: profileData.age || '',
     image: profileData.image || '',
-    goals: [],
-    allergies: []
+    goals: profileData.goals || [],
+    allergies: profileData.allergies || [],
+    conditions: profileData.conditions || [],
+    currentMedicines: profileData.currentMedicines || []
   })
 
   const [editingSection, setEditingSection] = useState(null)
@@ -688,7 +793,7 @@ function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
     const age = Number(editAge)
     if (!editName.trim()) return setFeedback('Please enter your name.')
     if (!Number.isInteger(age) || age < 1 || age > 120) return setFeedback('Please enter an age between 1 and 120.')
-    onSaveProfile({ name: editName.trim(), age, image: editImage })
+    onSaveProfile({ name: editName.trim(), age, image: editImage, goals: profile.goals, allergies: profile.allergies, conditions: profile.conditions, currentMedicines: profile.currentMedicines })
     setFeedback('Profile saved.')
   }
 
@@ -698,6 +803,10 @@ function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
       setProfile((prev) => ({ ...prev, goals: [...prev.goals, inputValue.trim()] }))
     } else if (section === 'allergies') {
       setProfile((prev) => ({ ...prev, allergies: [...prev.allergies, inputValue.trim()] }))
+    } else if (section === 'conditions') {
+      setProfile((prev) => ({ ...prev, conditions: [...prev.conditions, inputValue.trim()] }))
+    } else if (section === 'currentMedicines') {
+      setProfile((prev) => ({ ...prev, currentMedicines: [...prev.currentMedicines, inputValue.trim()] }))
     }
     setInputValue('')
     setEditingSection(null)
@@ -708,6 +817,10 @@ function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
       setProfile((prev) => ({ ...prev, goals: prev.goals.filter((_, idx) => idx !== indexToRemove) }))
     } else if (section === 'allergies') {
       setProfile((prev) => ({ ...prev, allergies: prev.allergies.filter((_, idx) => idx !== indexToRemove) }))
+    } else if (section === 'conditions') {
+      setProfile((prev) => ({ ...prev, conditions: prev.conditions.filter((_, idx) => idx !== indexToRemove) }))
+    } else if (section === 'currentMedicines') {
+      setProfile((prev) => ({ ...prev, currentMedicines: prev.currentMedicines.filter((_, idx) => idx !== indexToRemove) }))
     }
   }
 
@@ -859,6 +972,33 @@ function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="profile-section-card">
+        <div className="profile-section-header">
+          <h3>Health Information <span className="text-xs font-normal text-[#888888]">(Optional)</span></h3>
+        </div>
+        <p className="text-xs text-[#666666] mb-3">Add information to highlight possible medicine risks. You can remove it at any time.</p>
+        {[
+          ['conditions', 'Medical conditions', 'e.g. liver problems'],
+          ['currentMedicines', 'Current medicines', 'e.g. Warfarin']
+        ].map(([section, label, placeholder]) => (
+          <div key={section} className="mb-4">
+            <div className="text-xs font-bold text-[#212121] mb-2">{label}</div>
+            <div className="profile-chip-grid">
+              {(profile[section] || []).map((value, idx) => (
+                <span key={`${value}-${idx}`} className="profile-chip bg-[#FFFDE7] text-[#8A6500] border-0 flex items-center gap-1">
+                  {value}
+                  <button type="button" className="hover:opacity-70 ml-1" onClick={() => handleRemoveTag(section, idx)}><X size={12} /></button>
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <input type="text" className="border p-2 rounded-lg text-xs flex-1" placeholder={placeholder} value={editingSection === section ? inputValue : ''} onChange={(e) => { setEditingSection(section); setInputValue(e.target.value) }} onKeyDown={(e) => e.key === 'Enter' && handleAddTag(section)} />
+              <button className="bg-[#00C853] text-white px-3 py-1 rounded-lg text-xs font-bold" onClick={() => handleAddTag(section)}>Add</button>
+            </div>
+          </div>
+        ))}
       </div>
 
       <button className="btn-secondary text-[#D32F2F] w-full justify-center mt-4" onClick={onLogout}>Log Out</button>
@@ -1048,7 +1188,7 @@ export default function App() {
 
   const handleSignUpSuccess = ({ email, password, name }) => {
     if (users.some((user) => user.email === email)) return setAuthError('An account with this email already exists.')
-    const newUser = { id: createUserId(), email, password, name: name || '', age: '', image: '', history: [] }
+    const newUser = { id: createUserId(), email, password, name: name || '', age: '', image: '', goals: [], allergies: [], conditions: [], currentMedicines: [], history: [] }
     const nextUsers = [...users, newUser]
     updateUsers(nextUsers)
     setCurrentUserId(newUser.id)
@@ -1141,6 +1281,7 @@ export default function App() {
         <ScanResultsScreen
           item={selectedResultItem}
           mode={selectedScanMode}
+          userProfile={currentUser}
           onBack={() => setCurrentScreen('home')}
           onSave={handleSaveScan}
         />
