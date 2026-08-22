@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   House,
   User,
@@ -18,6 +18,33 @@ import {
 } from 'lucide-react'
 import scanReference from '../assets/Gemini_Generated_Image_oedrlaoedrlaoedr.png'
 import logoImage from '../assets/Your_paragraph_text-removebg-preview.png'
+
+const USERS_STORAGE_KEY = 'ingrelens-users-v1'
+const CURRENT_USER_STORAGE_KEY = 'ingrelens-current-user-v1'
+
+function loadUsers() {
+  try {
+    return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveUsers(users) {
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users))
+}
+
+function createUserId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function Avatar({ name, image, size = 'default' }) {
+  return (
+    <div className={`avatar-badge ${size === 'large' ? 'w-14 h-14 text-xl' : ''}`}>
+      {image ? <img src={image} alt={`${name || 'User'} profile`} className="h-full w-full rounded-full object-cover" /> : (name || 'User').trim().charAt(0).toUpperCase()}
+    </div>
+  )
+}
 
 // --- IngreLens Official Transparent Image Logo Component ---
 function IngreLensLogo({ size = 170, className = "" }) {
@@ -76,13 +103,13 @@ function BottomNav({ activeTab, setActiveTab }) {
 }
 
 // --- Login Screen (/auth - Login Mode) ---
-function LoginScreen({ onLogin, onGoToSignUp }) {
+function LoginScreen({ onLogin, onGoToSignUp, error }) {
   const [email, setEmail] = useState('sarah@example.com')
   const [password, setPassword] = useState('••••••••')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onLogin()
+    onLogin(email.trim().toLowerCase(), password)
   }
 
   return (
@@ -122,6 +149,7 @@ function LoginScreen({ onLogin, onGoToSignUp }) {
         <button type="submit" className="btn-primary mt-2">
           Log In <ArrowRight size={18} />
         </button>
+        {error && <p className="text-xs text-[#D32F2F] text-center">{error}</p>}
       </form>
 
       <div className="auth-actions text-center pb-4">
@@ -134,7 +162,7 @@ function LoginScreen({ onLogin, onGoToSignUp }) {
 }
 
 // --- Sign Up Screen (/auth - Sign Up Mode) ---
-function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
+function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -142,7 +170,8 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSignUpSuccess(fullName || 'User')
+    if (password !== confirmPassword) return
+    onSignUpSuccess({ email: email.trim().toLowerCase(), password, name: fullName.trim() })
   }
 
   return (
@@ -206,6 +235,10 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
         <button type="submit" className="btn-primary mt-2">
           Sign Up <ArrowRight size={18} />
         </button>
+        {password && confirmPassword && password !== confirmPassword && (
+          <p className="text-xs text-[#D32F2F] text-center">Passwords do not match.</p>
+        )}
+        {error && <p className="text-xs text-[#D32F2F] text-center">{error}</p>}
       </form>
 
       <div className="auth-actions text-center pb-4">
@@ -218,7 +251,7 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
 }
 
 // --- Home Screen (/home) ---
-function HomeScreen({ userName, setActiveTab, openModal, setScanMode, setViewResult }) {
+function HomeScreen({ userName, recentScans = [], setActiveTab, openModal, setScanMode, setViewResult }) {
   const articles = [
     {
       id: 1,
@@ -238,12 +271,6 @@ function HomeScreen({ userName, setActiveTab, openModal, setScanMode, setViewRes
       category: 'Pharma Safety',
       image: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80',
     }
-  ]
-
-  const recentScans = [
-    { id: 1, name: 'Harvest Oat Granola', type: 'Food', date: 'Today, 9:42 AM', score: 9, status: 'Safe' },
-    { id: 2, name: 'Amlodipine 5mg', type: 'Medicine', date: 'Yesterday, 8:16 PM', score: 10, status: 'Verified' },
-    { id: 3, name: 'Coco Crunch Bar', type: 'Food', date: 'May 18, 12:04 PM', score: 3, status: 'High Risk' }
   ]
 
   const firstName = (userName || 'User').trim().split(' ')[0]
@@ -330,8 +357,11 @@ function HomeScreen({ userName, setActiveTab, openModal, setScanMode, setViewRes
             See All
           </button>
         </div>
-        <div className="activity-list">
-          {recentScans.map((item) => (
+        {recentScans.length === 0 ? (
+          <p className="text-xs text-[#888888] italic py-2">No recent scans yet.</p>
+        ) : (
+          <div className="activity-list">
+            {recentScans.map((item) => (
             <div
               key={item.id}
               className="activity-item"
@@ -361,8 +391,9 @@ function HomeScreen({ userName, setActiveTab, openModal, setScanMode, setViewRes
                 {item.score}/10
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -376,7 +407,7 @@ function ScanModeModal({ isOpen, onClose, selectedMode, setSelectedMode, onConti
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>What are you analyzing?</h3>
+          <h3>What would you like to scan?</h3>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800">
             <X size={20} />
           </button>
@@ -388,19 +419,19 @@ function ScanModeModal({ isOpen, onClose, selectedMode, setSelectedMode, onConti
 
         <div className="toggle-options">
           <button
-            className={`toggle-btn ${selectedMode === 'MEDICINE' ? 'active' : ''}`}
-            onClick={() => setSelectedMode('MEDICINE')}
-          >
-            <Pill size={28} />
-            <span>MEDICINE</span>
-          </button>
-
-          <button
             className={`toggle-btn ${selectedMode === 'FOOD' ? 'active' : ''}`}
             onClick={() => setSelectedMode('FOOD')}
           >
             <Utensils size={28} />
-            <span>FOOD</span>
+            <span>Food</span>
+          </button>
+
+          <button
+            className={`toggle-btn ${selectedMode === 'MEDICINE' ? 'active' : ''}`}
+            onClick={() => setSelectedMode('MEDICINE')}
+          >
+            <Pill size={28} />
+            <span>Medicine</span>
           </button>
         </div>
 
@@ -472,7 +503,7 @@ function LiveCameraView({ mode, onScanComplete, onBack }) {
 }
 
 // --- Scan Results Screen (/results) ---
-function ScanResultsScreen({ item, onBack, onSave }) {
+function ScanResultsScreen({ item, mode, onBack, onSave }) {
   const defaultFoodResult = {
     modeName: 'Food Example',
     itemName: 'Harvest Oat Granola',
@@ -487,14 +518,38 @@ function ScanResultsScreen({ item, onBack, onSave }) {
     ]
   }
 
+  const defaultMedicineResult = {
+    modeName: 'Medicine Example',
+    itemName: 'Paracetamol 500 mg',
+    score: 9,
+    summary: 'Commonly used for temporary relief of pain and fever when taken as directed.',
+    strength: '500 mg per tablet',
+    category: 'Analgesic and antipyretic',
+    uses: 'Temporary relief of mild to moderate pain and fever.',
+    dosage: 'Adults and children 12 years and over: 1–2 tablets every 4–6 hours as needed. Do not exceed the dose stated on the package.',
+    warnings: 'Do not take with other medicines containing paracetamol. Ask a doctor or pharmacist before use if you have liver disease, drink alcohol regularly, or are taking other medicines.',
+    sideEffects: 'Nausea, stomach discomfort, or skin rash may occur. Stop use and seek medical help for signs of an allergic reaction or unusual skin changes.',
+    storage: 'Store in a cool, dry place below 25°C, away from direct sunlight and out of the reach of children.',
+    prescription: 'Usually available without a prescription, but local requirements may vary.'
+  }
+
   const resultData = item
-    ? {
+    ? item.type === 'Medicine'
+      ? {
+          ...defaultMedicineResult,
+          modeName: 'Medicine Analysis',
+          itemName: item.name,
+          score: item.score
+        }
+      : {
         modeName: `${item.type} Analysis`,
         itemName: item.name,
         score: item.score,
         summary: item.score >= 8 ? 'Great fit for your health profile!' : 'Contains ingredients flagging high risk.',
         ingredients: defaultFoodResult.ingredients
       }
+    : mode === 'MEDICINE'
+      ? defaultMedicineResult
     : defaultFoodResult
 
   const pointerPositionPercent = Math.min(Math.max((resultData.score / 10) * 100, 5), 95)
@@ -539,25 +594,52 @@ function ScanResultsScreen({ item, onBack, onSave }) {
         </div>
       </div>
 
-      {/* Detailed Ingredient Analysis List */}
-      <div>
-        <h3 className="text-sm font-bold text-[#212121] mb-3">Detailed Ingredient Breakdown</h3>
-        <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
-          {resultData.ingredients.map((ing, idx) => (
-            <div key={idx} className="ingredient-item">
-              <div className="ingredient-left">
-                <div className={`status-badge-icon ${ing.isSafe ? 'safe' : 'risk'}`}>
-                  {ing.isSafe ? <Check size={16} /> : <X size={16} />}
+      {mode === 'MEDICINE' ? (
+        <div>
+          <h3 className="text-sm font-bold text-[#212121] mb-3">Medicine Information</h3>
+          <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
+            {[
+              ['Strength / Dosage', resultData.strength],
+              ['Category', resultData.category],
+              ['Common Uses', resultData.uses],
+              ['Typical Dosage', resultData.dosage],
+              ['Warnings & Precautions', resultData.warnings],
+              ['Common Side Effects', resultData.sideEffects],
+              ['Storage', resultData.storage],
+              ['Prescription', resultData.prescription]
+            ].map(([label, value]) => (
+              <div key={label} className="ingredient-item items-start">
+                <div>
+                  <div className="eyebrow mb-1">{label}</div>
+                  <p className="text-sm text-[#212121] leading-relaxed">{value}</p>
                 </div>
-                <span className="font-semibold text-sm text-[#212121]">{ing.name}</span>
               </div>
-              <span className={`risk-tag-badge ${ing.isSafe ? 'safe' : 'risk'}`}>
-                {ing.tag}
-              </span>
-            </div>
-          ))}
+            ))}
+          </div>
+          <p className="text-xs text-[#666666] mt-3">
+            Demo information only. Follow your doctor&apos;s or pharmacist&apos;s advice and the instructions on the actual medicine packaging.
+          </p>
         </div>
-      </div>
+      ) : (
+        <div>
+          <h3 className="text-sm font-bold text-[#212121] mb-3">Detailed Ingredient Breakdown</h3>
+          <div className="ingredient-list-container border border-[#E8ECE9] rounded-2xl overflow-hidden">
+            {resultData.ingredients.map((ing, idx) => (
+              <div key={idx} className="ingredient-item">
+                <div className="ingredient-left">
+                  <div className={`status-badge-icon ${ing.isSafe ? 'safe' : 'risk'}`}>
+                    {ing.isSafe ? <Check size={16} /> : <X size={16} />}
+                  </div>
+                  <span className="font-semibold text-sm text-[#212121]">{ing.name}</span>
+                </div>
+                <span className={`risk-tag-badge ${ing.isSafe ? 'safe' : 'risk'}`}>
+                  {ing.tag}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button className="btn-primary mt-6" onClick={onSave}>
         Save to History <Check size={18} />
@@ -567,16 +649,48 @@ function ScanResultsScreen({ item, onBack, onSave }) {
 }
 
 // --- Profile Screen (/profile) ---
-function ProfileScreen({ userName, onBack }) {
+function ProfileScreen({ profileData, onSaveProfile, onLogout }) {
   const [profile, setProfile] = useState({
-    name: userName || 'User',
-    age: '',
+    name: profileData.name || '',
+    age: profileData.age || '',
+    image: profileData.image || '',
     goals: [],
     allergies: []
   })
 
   const [editingSection, setEditingSection] = useState(null)
   const [inputValue, setInputValue] = useState('')
+  const [editName, setEditName] = useState(profileData.name || '')
+  const [editAge, setEditAge] = useState(profileData.age || '')
+  const [editImage, setEditImage] = useState(profileData.image || '')
+  const [feedback, setFeedback] = useState('')
+
+  useEffect(() => {
+    setProfile((current) => ({ ...current, ...profileData }))
+    setEditName(profileData.name || '')
+    setEditAge(profileData.age || '')
+    setEditImage(profileData.image || '')
+  }, [profileData])
+
+  const handleImageChange = (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setFeedback('Please choose an image file.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setEditImage(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleProfileSave = () => {
+    const age = Number(editAge)
+    if (!editName.trim()) return setFeedback('Please enter your name.')
+    if (!Number.isInteger(age) || age < 1 || age > 120) return setFeedback('Please enter an age between 1 and 120.')
+    onSaveProfile({ name: editName.trim(), age, image: editImage })
+    setFeedback('Profile saved.')
+  }
 
   const handleAddTag = (section) => {
     if (!inputValue.trim()) return
@@ -606,9 +720,7 @@ function ProfileScreen({ userName, onBack }) {
 
       {/* Header Avatar Info */}
       <div className="flex items-center gap-4 p-4 bg-[#F4FAF5] rounded-2xl border border-[#E8ECE9] mb-6">
-        <div className="avatar-badge w-14 h-14 text-xl">
-          {(profile.name || 'User').trim().charAt(0).toUpperCase()}
-        </div>
+        <Avatar name={profile.name} image={profile.image} size="large" />
         <div>
           <h2 className="text-lg font-bold text-[#212121]">{profile.name}</h2>
           <p className="text-xs text-[#666666]">Profile active • Health shield enabled</p>
@@ -619,18 +731,26 @@ function ProfileScreen({ userName, onBack }) {
       <div className="profile-section-card">
         <div className="profile-section-header">
           <h3>Personal Details</h3>
-          <button
-            onClick={() => {
-              const newName = prompt('Enter Name:', profile.name)
-              const newAge = prompt('Enter Age:', profile.age)
-              if (newName !== null && newName.trim()) setProfile((p) => ({ ...p, name: newName.trim() }))
-              if (newAge !== null) setProfile((p) => ({ ...p, age: newAge.trim() }))
-            }}
-            className="p-1 text-[#00C853]"
-          >
-            <Pencil size={18} />
-          </button>
+          <Pencil size={18} className="text-[#00C853]" />
         </div>
+        <div className="form-group mb-4">
+          <label>Name</label>
+          <input className="input-underline" value={editName} onChange={(e) => setEditName(e.target.value)} />
+        </div>
+        <div className="form-group mb-4">
+          <label>Age</label>
+          <input className="input-underline" type="number" min="1" max="120" value={editAge} onChange={(e) => setEditAge(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <Avatar name={editName} image={editImage} />
+          <label className="btn-secondary cursor-pointer">
+            Change photo
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+          </label>
+          {editImage && <button className="btn-secondary text-[#D32F2F]" onClick={() => setEditImage('')}>Remove</button>}
+        </div>
+        <button className="btn-primary mb-3" onClick={handleProfileSave}>Save Changes <Check size={18} /></button>
+        {feedback && <p className={`text-xs mb-3 ${feedback === 'Profile saved.' ? 'text-[#388E3C]' : 'text-[#D32F2F]'}`}>{feedback}</p>}
         <div className="text-sm space-y-2 text-[#212121]">
           <div className="flex justify-between border-b border-gray-100 pb-2">
             <span className="text-[#666666]">Full Name:</span>
@@ -740,21 +860,16 @@ function ProfileScreen({ userName, onBack }) {
           </div>
         )}
       </div>
+
+      <button className="btn-secondary text-[#D32F2F] w-full justify-center mt-4" onClick={onLogout}>Log Out</button>
     </div>
   )
 }
 
 // --- History Screen (/history) ---
-function HistoryScreen({ onSelectResult }) {
-  const [historyItems, setHistoryItems] = useState([
-    { id: 1, name: 'Harvest Oat Granola', type: 'Food', date: 'Today, 9:42 AM', score: 9 },
-    { id: 2, name: 'Amlodipine 5mg', type: 'Medicine', date: 'Yesterday, 8:16 PM', score: 10 },
-    { id: 3, name: 'Coco Crunch Bar', type: 'Food', date: 'May 18, 12:04 PM', score: 3 },
-    { id: 4, name: 'Metformin 500mg', type: 'Medicine', date: 'May 15, 4:10 PM', score: 8 },
-    { id: 5, name: 'Organic Almond Milk', type: 'Food', date: 'May 10, 11:30 AM', score: 9 }
-  ])
-
+function HistoryScreen({ historyItems, onSelectResult, onDeleteHistory, error }) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
   const filteredHistory = historyItems.filter((item) =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -779,8 +894,21 @@ function HistoryScreen({ onSelectResult }) {
         <Search size={16} className="absolute left-3 top-3 text-gray-400" />
       </div>
 
-      <div className="activity-list">
-        {filteredHistory.map((item) => (
+      {historyItems.length > 0 && (
+        <button className="btn-secondary text-[#D32F2F] mb-4" onClick={() => setIsConfirmOpen(true)}>
+          Delete History <X size={16} />
+        </button>
+      )}
+
+      {filteredHistory.length === 0 ? (
+        <div className="text-center py-12">
+          <Clock className="mx-auto text-[#00C853] mb-3" size={32} />
+          <h2 className="text-lg font-bold text-[#212121]">No scans yet</h2>
+          <p className="text-xs text-[#666666] mt-1">Your scanned food and medicines will appear here.</p>
+        </div>
+      ) : (
+        <div className="activity-list">
+          {filteredHistory.map((item) => (
           <div
             key={item.id}
             className="activity-item"
@@ -807,27 +935,127 @@ function HistoryScreen({ onSelectResult }) {
               {item.score}/10
             </div>
           </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+      {error && <p className="text-xs text-[#D32F2F] mt-3">{error}</p>}
+      {isConfirmOpen && (
+        <div className="modal-overlay" onClick={() => setIsConfirmOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Delete all scan history?</h3>
+              <button className="p-1 text-gray-500" onClick={() => setIsConfirmOpen(false)}><X size={20} /></button>
+            </div>
+            <p className="text-sm text-[#666666] mb-5">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1 justify-center" onClick={() => setIsConfirmOpen(false)}>Cancel</button>
+              <button className="btn-primary flex-1" onClick={() => { onDeleteHistory(); setIsConfirmOpen(false) }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProfileCompletionModal({ initialName, onSave, onClose }) {
+  const [name, setName] = useState(initialName || '')
+  const [age, setAge] = useState('')
+  const [image, setImage] = useState('')
+  const [error, setError] = useState('')
+
+  const handleImageChange = (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return setError('Please choose an image file.')
+    const reader = new FileReader()
+    reader.onload = () => setImage(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    const numericAge = Number(age)
+    if (!name.trim()) return setError('Please enter your name.')
+    if (!Number.isInteger(numericAge) || numericAge < 1 || numericAge > 120) {
+      return setError('Please enter an age between 1 and 120.')
+    }
+    onSave({ name: name.trim(), age: numericAge, image })
+  }
+
+  return (
+    <div className="modal-overlay">
+      <form className="modal-content" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h3>Complete your profile</h3>
+          {onClose && <button type="button" onClick={onClose} className="p-1 text-gray-500"><X size={20} /></button>}
+        </div>
+        <p className="text-sm text-[#666666] mb-4">Add the basics to personalize your health shield.</p>
+        <div className="form-group mb-4">
+          <label>Name</label>
+          <input className="input-underline" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </div>
+        <div className="form-group mb-4">
+          <label>Age</label>
+          <input className="input-underline" type="number" min="1" max="120" value={age} onChange={(e) => setAge(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <Avatar name={name} image={image} />
+          <label className="btn-secondary cursor-pointer">
+            Add photo
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+          </label>
+          {image && <button type="button" className="btn-secondary text-[#D32F2F]" onClick={() => setImage('')}>Remove</button>}
+        </div>
+        {error && <p className="text-xs text-[#D32F2F] mb-3">{error}</p>}
+        <button type="submit" className="btn-primary">Save & Continue <ArrowRight size={18} /></button>
+      </form>
     </div>
   )
 }
 
 // --- Main App Component ---
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('login') // login, signup, home, scan, results, profile, history
+  const [currentScreen, setCurrentScreen] = useState(() => localStorage.getItem(CURRENT_USER_STORAGE_KEY) ? 'home' : 'login') // login, signup, home, scan, results, profile, history
   const [selectedScanMode, setSelectedScanMode] = useState('FOOD') // FOOD or MEDICINE
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedResultItem, setSelectedResultItem] = useState(null)
-  const [userName, setUserName] = useState('')
+  const [users, setUsers] = useState(loadUsers)
+  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem(CURRENT_USER_STORAGE_KEY))
+  const [authError, setAuthError] = useState('')
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
+  const [historyError, setHistoryError] = useState('')
 
-  const handleLogin = () => {
+  const currentUser = users.find((user) => user.id === currentUserId)
+
+  const updateUsers = (nextUsers) => {
+    setUsers(nextUsers)
+    saveUsers(nextUsers)
+  }
+
+  const updateCurrentUser = (changes) => {
+    updateUsers(users.map((user) => user.id === currentUserId ? { ...user, ...changes } : user))
+  }
+
+  const handleLogin = (email, password) => {
+    const user = users.find((candidate) => candidate.email === email && candidate.password === password)
+    if (!user) return setAuthError('No matching account found. Please check your details or sign up.')
+    setAuthError('')
+    setCurrentUserId(user.id)
+    localStorage.setItem(CURRENT_USER_STORAGE_KEY, user.id)
     setCurrentScreen('home')
   }
 
-  const handleSignUpSuccess = (name) => {
-    if (name) setUserName(name)
+  const handleSignUpSuccess = ({ email, password, name }) => {
+    if (users.some((user) => user.email === email)) return setAuthError('An account with this email already exists.')
+    const newUser = { id: createUserId(), email, password, name: name || '', age: '', image: '', history: [] }
+    const nextUsers = [...users, newUser]
+    updateUsers(nextUsers)
+    setCurrentUserId(newUser.id)
+    localStorage.setItem(CURRENT_USER_STORAGE_KEY, newUser.id)
+    setAuthError('')
     setCurrentScreen('home')
+    setProfileModalOpen(true)
   }
 
   const handleContinueFromModal = () => {
@@ -836,7 +1064,39 @@ export default function App() {
   }
 
   const handleScanComplete = () => {
+    setSelectedResultItem(null)
     setCurrentScreen('results')
+  }
+
+  const handleSaveScan = () => {
+    if (!currentUser) return
+    const scan = {
+      id: createUserId(),
+      name: selectedScanMode === 'MEDICINE' ? 'Paracetamol 500 mg' : 'Harvest Oat Granola',
+      type: selectedScanMode === 'MEDICINE' ? 'Medicine' : 'Food',
+      date: 'Just now',
+      score: 9
+    }
+    updateCurrentUser({ history: [scan, ...(currentUser.history || [])] })
+    setCurrentScreen('history')
+  }
+
+  const handleSaveProfile = (profile) => updateCurrentUser(profile)
+
+  const handleDeleteHistory = () => {
+    try {
+      updateCurrentUser({ history: [] })
+      setHistoryError('')
+    } catch {
+      setHistoryError('History could not be deleted. Please try again.')
+    }
+  }
+
+  const handleLogout = () => {
+    setCurrentUserId(null)
+    localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+    setSelectedResultItem(null)
+    setCurrentScreen('login')
   }
 
   return (
@@ -846,6 +1106,7 @@ export default function App() {
         <LoginScreen
           onLogin={handleLogin}
           onGoToSignUp={() => setCurrentScreen('signup')}
+          error={authError}
         />
       )}
 
@@ -853,12 +1114,14 @@ export default function App() {
         <SignUpScreen
           onSignUpSuccess={handleSignUpSuccess}
           onGoToLogin={() => setCurrentScreen('login')}
+          error={authError}
         />
       )}
 
       {currentScreen === 'home' && (
         <HomeScreen
-          userName={userName}
+          userName={currentUser?.name || 'User'}
+          recentScans={(currentUser?.history || []).slice(0, 3)}
           setActiveTab={(tab) => setCurrentScreen(tab)}
           openModal={() => setIsModalOpen(true)}
           setScanMode={setSelectedScanMode}
@@ -877,24 +1140,30 @@ export default function App() {
       {currentScreen === 'results' && (
         <ScanResultsScreen
           item={selectedResultItem}
+          mode={selectedScanMode}
           onBack={() => setCurrentScreen('home')}
-          onSave={() => setCurrentScreen('history')}
+          onSave={handleSaveScan}
         />
       )}
 
       {currentScreen === 'profile' && (
         <ProfileScreen
-          userName={userName}
-          onBack={() => setCurrentScreen('home')}
+          profileData={currentUser || { name: '', age: '', image: '' }}
+          onSaveProfile={handleSaveProfile}
+          onLogout={handleLogout}
         />
       )}
 
       {currentScreen === 'history' && (
         <HistoryScreen
+          historyItems={currentUser?.history || []}
           onSelectResult={(item) => {
             setSelectedResultItem(item)
+            setSelectedScanMode(item.type === 'Medicine' ? 'MEDICINE' : 'FOOD')
             setCurrentScreen('results')
           }}
+          onDeleteHistory={handleDeleteHistory}
+          error={historyError}
         />
       )}
 
@@ -902,7 +1171,13 @@ export default function App() {
       {['home', 'results', 'profile', 'history'].includes(currentScreen) && (
         <BottomNav
           activeTab={currentScreen}
-          setActiveTab={(tab) => setCurrentScreen(tab)}
+          setActiveTab={(tab) => {
+            if (tab === 'scan') {
+              setIsModalOpen(true)
+              return
+            }
+            setCurrentScreen(tab)
+          }}
         />
       )}
 
@@ -914,6 +1189,15 @@ export default function App() {
         setSelectedMode={setSelectedScanMode}
         onContinue={handleContinueFromModal}
       />
+      {profileModalOpen && (
+        <ProfileCompletionModal
+          initialName={currentUser?.name}
+          onSave={(profile) => {
+            handleSaveProfile(profile)
+            setProfileModalOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
