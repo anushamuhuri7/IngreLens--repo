@@ -142,7 +142,7 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSignUpSuccess()
+    onSignUpSuccess(fullName || 'User')
   }
 
   return (
@@ -218,7 +218,7 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin }) {
 }
 
 // --- Home Screen (/home) ---
-function HomeScreen({ setActiveTab, openModal, setScanMode, setViewResult }) {
+function HomeScreen({ userName, setActiveTab, openModal, setScanMode, setViewResult }) {
   const articles = [
     {
       id: 1,
@@ -246,16 +246,18 @@ function HomeScreen({ setActiveTab, openModal, setScanMode, setViewResult }) {
     { id: 3, name: 'Coco Crunch Bar', type: 'Food', date: 'May 18, 12:04 PM', score: 3, status: 'High Risk' }
   ]
 
+  const firstName = (userName || 'User').trim().split(' ')[0]
+
   return (
     <div className="screen">
       {/* Header */}
       <div className="home-greeting">
         <div>
           <div className="eyebrow">Personal Shield Active</div>
-          <h1>Hello, Sarah</h1>
+          <h1>Hello, {firstName}</h1>
         </div>
         <div className="avatar-badge" onClick={() => setActiveTab('profile')}>
-          S
+          {firstName.charAt(0).toUpperCase()}
         </div>
       </div>
 
@@ -565,12 +567,12 @@ function ScanResultsScreen({ item, onBack, onSave }) {
 }
 
 // --- Profile Screen (/profile) ---
-function ProfileScreen({ onBack }) {
+function ProfileScreen({ userName, onBack }) {
   const [profile, setProfile] = useState({
-    name: 'Sarah Mwangi',
-    age: '29',
-    goals: ['Reduce Sodium', 'Gluten-Free', 'Low Sugar'],
-    allergies: ['Peanuts', 'Hypertension', 'Lactose Intolerant']
+    name: userName || 'User',
+    age: '',
+    goals: [],
+    allergies: []
   })
 
   const [editingSection, setEditingSection] = useState(null)
@@ -587,6 +589,14 @@ function ProfileScreen({ onBack }) {
     setEditingSection(null)
   }
 
+  const handleRemoveTag = (section, indexToRemove) => {
+    if (section === 'goals') {
+      setProfile((prev) => ({ ...prev, goals: prev.goals.filter((_, idx) => idx !== indexToRemove) }))
+    } else if (section === 'allergies') {
+      setProfile((prev) => ({ ...prev, allergies: prev.allergies.filter((_, idx) => idx !== indexToRemove) }))
+    }
+  }
+
   return (
     <div className="screen">
       <div className="page-header">
@@ -596,7 +606,9 @@ function ProfileScreen({ onBack }) {
 
       {/* Header Avatar Info */}
       <div className="flex items-center gap-4 p-4 bg-[#F4FAF5] rounded-2xl border border-[#E8ECE9] mb-6">
-        <div className="avatar-badge w-14 h-14 text-xl">S</div>
+        <div className="avatar-badge w-14 h-14 text-xl">
+          {(profile.name || 'User').trim().charAt(0).toUpperCase()}
+        </div>
         <div>
           <h2 className="text-lg font-bold text-[#212121]">{profile.name}</h2>
           <p className="text-xs text-[#666666]">Profile active • Health shield enabled</p>
@@ -611,8 +623,8 @@ function ProfileScreen({ onBack }) {
             onClick={() => {
               const newName = prompt('Enter Name:', profile.name)
               const newAge = prompt('Enter Age:', profile.age)
-              if (newName) setProfile((p) => ({ ...p, name: newName }))
-              if (newAge) setProfile((p) => ({ ...p, age: newAge }))
+              if (newName !== null && newName.trim()) setProfile((p) => ({ ...p, name: newName.trim() }))
+              if (newAge !== null) setProfile((p) => ({ ...p, age: newAge.trim() }))
             }}
             className="p-1 text-[#00C853]"
           >
@@ -626,7 +638,7 @@ function ProfileScreen({ onBack }) {
           </div>
           <div className="flex justify-between pt-1">
             <span className="text-[#666666]">Age:</span>
-            <span className="font-semibold">{profile.age} years</span>
+            <span className="font-semibold">{profile.age ? `${profile.age} years` : 'Not specified'}</span>
           </div>
         </div>
       </div>
@@ -636,27 +648,39 @@ function ProfileScreen({ onBack }) {
         <div className="profile-section-header">
           <h3>Health Goals</h3>
           <button
-            onClick={() => setEditingSection('goals')}
+            onClick={() => setEditingSection(editingSection === 'goals' ? null : 'goals')}
             className="p-1 text-[#00C853]"
           >
             <Pencil size={18} />
           </button>
         </div>
-        <div className="profile-chip-grid">
-          {profile.goals.map((g, idx) => (
-            <span key={idx} className="profile-chip bg-[#E8F5E9] text-[#00C853] border-0">
-              {g}
-            </span>
-          ))}
-        </div>
+        {profile.goals.length === 0 ? (
+          <p className="text-xs text-[#888888] italic py-1">No health goals added yet.</p>
+        ) : (
+          <div className="profile-chip-grid">
+            {profile.goals.map((g, idx) => (
+              <span key={idx} className="profile-chip bg-[#E8F5E9] text-[#00C853] border-0 flex items-center gap-1">
+                {g}
+                <button
+                  type="button"
+                  className="hover:opacity-70 ml-1 cursor-pointer"
+                  onClick={() => handleRemoveTag('goals', idx)}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {editingSection === 'goals' && (
           <div className="mt-3 flex gap-2">
             <input
               type="text"
               className="border p-2 rounded-lg text-xs flex-1"
-              placeholder="Add new goal..."
+              placeholder="Add new goal (e.g. Low Sodium)..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTag('goals')}
             />
             <button
               className="bg-[#00C853] text-white px-3 py-1 rounded-lg text-xs font-bold"
@@ -673,27 +697,39 @@ function ProfileScreen({ onBack }) {
         <div className="profile-section-header">
           <h3>Allergies & Conditions</h3>
           <button
-            onClick={() => setEditingSection('allergies')}
+            onClick={() => setEditingSection(editingSection === 'allergies' ? null : 'allergies')}
             className="p-1 text-[#00C853]"
           >
             <Pencil size={18} />
           </button>
         </div>
-        <div className="profile-chip-grid">
-          {profile.allergies.map((a, idx) => (
-            <span key={idx} className="profile-chip bg-[#FFEBEE] text-[#D32F2F] border-0">
-              {a}
-            </span>
-          ))}
-        </div>
+        {profile.allergies.length === 0 ? (
+          <p className="text-xs text-[#888888] italic py-1">No allergies or conditions added yet.</p>
+        ) : (
+          <div className="profile-chip-grid">
+            {profile.allergies.map((a, idx) => (
+              <span key={idx} className="profile-chip bg-[#FFEBEE] text-[#D32F2F] border-0 flex items-center gap-1">
+                {a}
+                <button
+                  type="button"
+                  className="hover:opacity-70 ml-1 cursor-pointer"
+                  onClick={() => handleRemoveTag('allergies', idx)}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {editingSection === 'allergies' && (
           <div className="mt-3 flex gap-2">
             <input
               type="text"
               className="border p-2 rounded-lg text-xs flex-1"
-              placeholder="Add allergy/condition..."
+              placeholder="Add allergy/condition (e.g. Peanuts)..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTag('allergies')}
             />
             <button
               className="bg-[#D32F2F] text-white px-3 py-1 rounded-lg text-xs font-bold"
@@ -783,8 +819,14 @@ export default function App() {
   const [selectedScanMode, setSelectedScanMode] = useState('FOOD') // FOOD or MEDICINE
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedResultItem, setSelectedResultItem] = useState(null)
+  const [userName, setUserName] = useState('')
 
   const handleLogin = () => {
+    setCurrentScreen('home')
+  }
+
+  const handleSignUpSuccess = (name) => {
+    if (name) setUserName(name)
     setCurrentScreen('home')
   }
 
@@ -809,13 +851,14 @@ export default function App() {
 
       {currentScreen === 'signup' && (
         <SignUpScreen
-          onSignUpSuccess={() => setCurrentScreen('home')}
+          onSignUpSuccess={handleSignUpSuccess}
           onGoToLogin={() => setCurrentScreen('login')}
         />
       )}
 
       {currentScreen === 'home' && (
         <HomeScreen
+          userName={userName}
           setActiveTab={(tab) => setCurrentScreen(tab)}
           openModal={() => setIsModalOpen(true)}
           setScanMode={setSelectedScanMode}
@@ -840,7 +883,10 @@ export default function App() {
       )}
 
       {currentScreen === 'profile' && (
-        <ProfileScreen onBack={() => setCurrentScreen('home')} />
+        <ProfileScreen
+          userName={userName}
+          onBack={() => setCurrentScreen('home')}
+        />
       )}
 
       {currentScreen === 'history' && (
