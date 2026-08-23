@@ -1,9 +1,27 @@
+# Node / Frontend
+node_modules/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python / Backend
 venv/
 .venv/
-node_modules/
 __pycache__/
 *.pyc
-.env
-ingrelens.db
+*.pyo
+*.pyd
 *.db
-app/uploads/
+*.sqlite3
+requirements.txt
+runtime.txt
+
+# Supabase local
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
