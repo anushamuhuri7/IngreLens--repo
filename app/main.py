@@ -27,7 +27,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://ingre-lens.vercel.app/",
+        "https://ingre-lens.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
