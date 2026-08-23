@@ -1,19 +1,6 @@
-# Python
-venv/
-__pycache__/
-*.pyc
-
-# Node
-node_modules/
-dist/
-
-# Environment
 .env
-
-# Database
-*.db
 __pycache__/
 *.pyc
 .venv/
-venv/
-.env
+healthshield.db
+app/uploads/

@@ -1,33 +1,61 @@
-import re
-import google.generativeai as genai
 import os
 
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
+
+
 ULTRA_PROCESSED_ADDITIVES = {
-    "e322": "Soy Lecithin",
-    "e330": "Citric Acid",
-    "e621": "Monosodium Glutamate (MSG)",
-    "e950": "Acesulfame K",
-    "e951": "Aspartame",
-    "e955": "Sucralose",
-    "e211": "Sodium Benzoate",
-    "e202": "Potassium Sorbate",
-    "e407": "Carrageenan",
-    "e466": "Carboxymethyl Cellulose",
-    "e471": "Mono and Diglycerides"
+
+    "e322":
+        "Soy Lecithin",
+
+    "e330":
+        "Citric Acid",
+
+    "e621":
+        "Monosodium Glutamate (MSG)",
+
+    "e950":
+        "Acesulfame K",
+
+    "e951":
+        "Aspartame",
+
+    "e955":
+        "Sucralose",
+
+    "e211":
+        "Sodium Benzoate",
+
+    "e202":
+        "Potassium Sorbate",
+
+    "e407":
+        "Carrageenan",
+
+    "e466":
+        "Carboxymethyl Cellulose",
+
+    "e471":
+        "Mono and Diglycerides"
 }
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-model = genai.GenerativeModel("gemini-2.5-flash")
-
 
 
 def detect_additives(text: str):
+
+    if not text:
+        return []
+
     text = text.lower()
 
     found = []
 
     for code, name in ULTRA_PROCESSED_ADDITIVES.items():
+
         if code in text:
+
             found.append({
                 "code": code.upper(),
                 "name": name
@@ -36,48 +64,138 @@ def detect_additives(text: str):
     return found
 
 
-def ai_explanation(score, warnings, additives):
-    message = f"HealthShield Score: {score}/10.\n"
+def ai_explanation(
+    score,
+    warnings,
+    additives
+):
+
+    message = (
+        f"HealthShield Score: "
+        f"{score}/10.\n"
+    )
 
     if warnings:
-        message += "\nPersonalized concerns:\n"
+
+        message += (
+            "\nPersonalized concerns:\n"
+        )
+
         for warning in warnings:
-            message += f"• {warning}\n"
+
+            message += (
+                f"• {warning}\n"
+            )
 
     if additives:
-        message += "\nUltra-processed additives detected:\n"
+
+        message += (
+            "\nUltra-processed additives "
+            "detected:\n"
+        )
+
         for additive in additives:
-            message += f"• {additive['code']} ({additive['name']})\n"
+
+            message += (
+                f"• {additive['code']} "
+                f"({additive['name']})\n"
+            )
 
     if score >= 8:
-        message += "\nThis product appears suitable for your health profile."
+
+        message += (
+            "\nThis product appears suitable "
+            "for your health profile."
+        )
+
     elif score >= 5:
-        message += "\nUse this product in moderation."
+
+        message += (
+            "\nUse this product in moderation."
+        )
+
     else:
-        message += "\nThis product poses multiple concerns based on your health profile."
+
+        message += (
+            "\nThis product poses multiple "
+            "concerns based on your health profile."
+        )
 
     return message
-def generate_ai_reason(product, profile, score, warnings):
 
-    prompt = f"""
-    Product:
-    {product}
 
-    User profile:
-    Diabetes: {profile.diabetes}
-    Hypertension: {profile.hypertension}
-    Lactose: {profile.lactose_intolerant}
-    Gluten: {profile.gluten_allergy}
-    Nut allergy: {profile.nut_allergy}
+def generate_ai_reason(
+    product,
+    profile,
+    score,
+    warnings
+):
 
-    Score: {score}/10
+    api_key = os.getenv(
+        "GEMINI_API_KEY"
+    )
 
-    Warnings:
-    {warnings}
+    if not api_key:
 
-    Explain this in simple language.
-    """
+        return (
+            "AI explanation is unavailable "
+            "because GEMINI_API_KEY is not configured."
+        )
 
-    response = model.generate_content(prompt)
+    if genai is None:
 
-    return response.text
+        return (
+            "Google Generative AI package "
+            "is not installed."
+        )
+
+    try:
+
+        genai.configure(
+            api_key=api_key
+        )
+
+        model = genai.GenerativeModel(
+            "gemini-2.5-flash"
+        )
+
+        prompt = f"""
+Product:
+{product}
+
+User health profile:
+Diabetes: {profile.diabetes}
+Hypertension: {profile.hypertension}
+Lactose intolerance: {profile.lactose_intolerant}
+Gluten allergy: {profile.gluten_allergy}
+Nut allergy: {profile.nut_allergy}
+
+HealthShield score:
+{score}/10
+
+Warnings:
+{warnings}
+
+Explain the result in simple language.
+Do not diagnose medical conditions.
+Focus on the ingredients and nutritional
+information provided.
+"""
+
+        response = model.generate_content(
+            prompt
+        )
+
+        if response and response.text:
+
+            return response.text
+
+        return (
+            "No AI explanation was generated."
+        )
+
+    except Exception:
+
+        return (
+            "AI explanation is temporarily unavailable."
+        )

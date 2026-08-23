@@ -8,32 +8,18 @@ from fastapi import (
 
 from sqlalchemy.orm import Session
 
-import cv2
-import numpy as np
-import os
-import uuid
-
-
-# ==================================================
-# QR / BARCODE
-# ==================================================
-
-try:
-    from pyzbar.pyzbar import decode
-except Exception:
-    decode = None
-
-
-# ==================================================
-# APP IMPORTS
-# ==================================================
-
 from app.dependencies import (
     get_db,
     get_current_user
 )
 
 from app import models
+
+from app.services.scanner import (
+    decode_image,
+    detect_food_code,
+    resize_for_scanning
+)
 
 from app.services.ai import (
     detect_additives,
@@ -47,74 +33,24 @@ from app.services.nutrition import (
 )
 
 
-# ==================================================
-# ROUTER
-# ==================================================
-
 router = APIRouter(
     prefix="/food",
     tags=["Food Scanner"]
 )
 
 
-# ==================================================
-# QR / BARCODE DETECTION
-# ==================================================
-
-def detect_food_code(frame):
-    """
-    Detect QR code or barcode from the uploaded image.
-
-    Returns:
-        str: Detected QR/barcode value
-        None: If no code was detected
-    """
-
-    # --------------------------------------------------
-    # First try OpenCV QR detector
-    # --------------------------------------------------
-
-    qr_detector = cv2.QRCodeDetector()
-
-    qr_value, points, _ = (
-        qr_detector.detectAndDecode(frame)
-    )
-
-    if qr_value:
-        return qr_value
+# Maximum image size:
+# 10 MB
+MAX_IMAGE_SIZE = 10 * 1024 * 1024
 
 
-    # --------------------------------------------------
-    # Then try barcode detector
-    # --------------------------------------------------
+ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp"
+}
 
-    if decode is not None:
-
-        try:
-
-            detected = decode(frame)
-
-            if detected:
-
-                return detected[0].data.decode(
-                    "utf-8",
-                    errors="ignore"
-                )
-
-        except Exception:
-            pass
-
-
-    # --------------------------------------------------
-    # Nothing detected
-    # --------------------------------------------------
-
-    return None
-
-
-# ==================================================
-# FOOD SCANNER
-# ==================================================
 
 @router.post("/scan")
 async def scan_food(
@@ -130,10 +66,26 @@ async def scan_food(
 ):
 
     # ==================================================
+    # VALIDATE FILE TYPE
+    # ==================================================
+
+    if image.content_type not in ALLOWED_CONTENT_TYPES:
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported image format. "
+                "Use JPEG, PNG or WEBP."
+            )
+        )
+
+
+    # ==================================================
     # READ IMAGE
     # ==================================================
 
     contents = await image.read()
+
 
     if not contents:
 
@@ -144,18 +96,28 @@ async def scan_food(
 
 
     # ==================================================
-    # CONVERT IMAGE
+    # CHECK IMAGE SIZE
     # ==================================================
 
-    np_image = np.frombuffer(
-        contents,
-        np.uint8
+    if len(contents) > MAX_IMAGE_SIZE:
+
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "Image is too large. "
+                "Maximum allowed size is 10 MB."
+            )
+        )
+
+
+    # ==================================================
+    # DECODE IMAGE
+    # ==================================================
+
+    frame = decode_image(
+        contents
     )
 
-    frame = cv2.imdecode(
-        np_image,
-        cv2.IMREAD_COLOR
-    )
 
     if frame is None:
 
@@ -166,38 +128,21 @@ async def scan_food(
 
 
     # ==================================================
-    # SAVE IMAGE TEMPORARILY
+    # RESIZE
     # ==================================================
 
-    upload_dir = os.path.join(
-        "app",
-        "uploads"
+    frame = resize_for_scanning(
+        frame
     )
-
-    os.makedirs(
-        upload_dir,
-        exist_ok=True
-    )
-
-    filename = f"{uuid.uuid4()}.jpg"
-
-    filepath = os.path.join(
-        upload_dir,
-        filename
-    )
-
-
-    with open(filepath, "wb") as f:
-        f.write(contents)
 
 
     try:
 
         # ==================================================
-        # BARCODE / QR
+        # QR / BARCODE DETECTION
         # ==================================================
 
-        barcode = detect_food_code(
+        detected_code = detect_food_code(
             frame
         )
 
@@ -206,15 +151,32 @@ async def scan_food(
         # OCR FALLBACK
         # ==================================================
 
-        if not barcode:
+        if not detected_code:
 
-            text = extract_text_from_image(
-                filepath
-            )
+            try:
+
+                text = extract_text_from_image(
+                    frame
+                )
+
+            except Exception as e:
+
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "OCR processing failed. "
+                        "Make sure EasyOCR is installed."
+                    )
+                )
+
+
+            # Detect additives directly from
+            # ingredient text
 
             additives = detect_additives(
                 text
             )
+
 
             return {
 
@@ -226,11 +188,21 @@ async def scan_food(
 
                 "detected_additives": additives,
 
-                "message":
-                    "No barcode detected. "
+                "message": (
+                    "No barcode or QR code detected. "
                     "OCR analysis completed."
+                )
 
             }
+
+
+        # ==================================================
+        # EXTRACT CODE
+        # ==================================================
+
+        barcode = detected_code["code"]
+
+        scan_type = detected_code["type"]
 
 
         # ==================================================
@@ -241,12 +213,24 @@ async def scan_food(
             barcode
         )
 
+
         if not product:
 
-            raise HTTPException(
-                status_code=404,
-                detail="Product not found for this barcode"
-            )
+            return {
+
+                "success": False,
+
+                "mode": scan_type,
+
+                "barcode": barcode,
+
+                "message": (
+                    "Barcode detected, but the "
+                    "product was not found in "
+                    "OpenFoodFacts."
+                )
+
+            }
 
 
         # ==================================================
@@ -254,21 +238,29 @@ async def scan_food(
         # ==================================================
 
         profile = (
+
             db.query(
                 models.HealthProfile
             )
+
             .filter(
                 models.HealthProfile.user_id
                 == current_user.id
             )
+
             .first()
+
         )
+
 
         if not profile:
 
             raise HTTPException(
                 status_code=404,
-                detail="Health profile not found"
+                detail=(
+                    "Health profile not found. "
+                    "Please create your health profile first."
+                )
             )
 
 
@@ -285,13 +277,21 @@ async def scan_food(
 
 
         # ==================================================
-        # ADDITIVES
+        # INGREDIENTS
         # ==================================================
 
-        ingredients = product.get(
-            "ingredients_text",
-            ""
+        ingredients = (
+            product.get(
+                "ingredients_text",
+                ""
+            )
+            or ""
         )
+
+
+        # ==================================================
+        # ADDITIVE DETECTION
+        # ==================================================
 
         additives = detect_additives(
             ingredients
@@ -317,19 +317,26 @@ async def scan_food(
 
             user_id=current_user.id,
 
-            product_name=
-                product.get("product_name"),
+            product_name=(
+                product.get(
+                    "product_name"
+                )
+            ),
 
             safety_score=score,
 
-            risk_message=
-                ", ".join(warnings)
+            risk_message=", ".join(
+                warnings
+            )
 
         )
+
 
         db.add(scan)
 
         db.commit()
+
+        db.refresh(scan)
 
 
         # ==================================================
@@ -340,24 +347,45 @@ async def scan_food(
 
             "success": True,
 
-            "mode": "BARCODE",
+            "mode": scan_type,
 
             "barcode": barcode,
 
             "product_name":
-                product.get("product_name"),
+                product.get(
+                    "product_name"
+                ),
 
             "brand":
-                product.get("brands"),
+                product.get(
+                    "brands"
+                ),
 
             "ingredients_text":
-                product.get("ingredients_text"),
+                product.get(
+                    "ingredients_text"
+                ),
+
+            "allergens":
+                product.get(
+                    "allergens"
+                ),
 
             "nutrition_grade":
-                product.get("nutrition_grades"),
+                product.get(
+                    "nutrition_grades"
+                ),
 
             "nova_group":
-                product.get("nova_group"),
+                product.get(
+                    "nova_group"
+                ),
+
+            "nutriments":
+                product.get(
+                    "nutriments",
+                    {}
+                ),
 
             "safety_score":
                 score,
@@ -369,36 +397,27 @@ async def scan_food(
                 additives,
 
             "ai_explanation":
-                explanation
+                explanation,
+
+            "scan_id":
+                scan.id
 
         }
 
 
     except HTTPException:
-        # Preserve FastAPI HTTP errors
+
         raise
 
 
     except Exception as e:
 
-        # Roll back database changes if something fails
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Food scan failed: {str(e)}"
+            detail=(
+                "Food scan failed. "
+                "Please try again."
+            )
         )
-
-
-    finally:
-
-        # ==================================================
-        # DELETE TEMPORARY FILE
-        # ==================================================
-
-        if os.path.exists(filepath):
-
-            try:
-                os.remove(filepath)
-            except Exception:
-                pass
