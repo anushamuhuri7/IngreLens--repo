@@ -10,11 +10,19 @@ from sqlalchemy.orm import Session
 
 import cv2
 import numpy as np
-import easyocr
+try:
+    import easyocr
+except Exception:
+    easyocr = None
+
 import uuid
 import os
 
-from pyzbar.pyzbar import decode
+try:
+    from pyzbar.pyzbar import decode
+except Exception:
+    decode = None
+
 
 from app.dependencies import (
     get_db,

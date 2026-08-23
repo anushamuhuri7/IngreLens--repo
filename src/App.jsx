@@ -119,10 +119,104 @@ function BottomNav({ activeTab, setActiveTab }) {
   )
 }
 
+// --- Forgot Password Modal/Screen ---
+function ForgotPasswordModal({ onClose }) {
+  const [email, setEmail] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [resetError, setResetError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!email) return
+    setLoading(true)
+    setResetError('')
+
+    try {
+      const response = await fetch('http://localhost:8000/users/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password: 'dummy' }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.detail || 'Failed to send password reset email.')
+      }
+
+      setSubmitted(true)
+    } catch (err) {
+      setResetError(err.message || 'Failed to send password reset email. Please ensure backend is running.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl text-center relative">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+        >
+          <X size={20} />
+        </button>
+
+        <IngreLensLogo size={100} className="mb-2" />
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Reset Password</h2>
+
+        {submitted ? (
+          <div className="my-4 space-y-3">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-[#00C853]">
+              <Check size={28} />
+            </div>
+            <p className="text-sm font-medium text-gray-800">
+              Password reset email sent to <strong>{email}</strong>!
+            </p>
+            <p className="text-xs text-gray-500">
+              Please check your email inbox and spam folder for instructions to reset your password.
+            </p>
+            <button
+              onClick={onClose}
+              className="btn-primary w-full mt-4"
+            >
+              Back to Login
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4 text-left mt-4">
+            <p className="text-xs text-gray-500 text-center">
+              Enter your registered email address to receive a password reset link.
+            </p>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                className="input-underline"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email address"
+                required
+              />
+            </div>
+            {resetError && (
+              <p className="text-xs text-red-500 text-center">{resetError}</p>
+            )}
+            <button type="submit" className="btn-primary w-full mt-2" disabled={loading}>
+              {loading ? 'Sending...' : 'Send Reset Link'} <ArrowRight size={18} />
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // --- Login Screen (/auth - Login Mode) ---
 function LoginScreen({ onLogin, onGoToSignUp, error }) {
-  const [email, setEmail] = useState('sarah@example.com')
-  const [password, setPassword] = useState('••••••••')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -131,6 +225,10 @@ function LoginScreen({ onLogin, onGoToSignUp, error }) {
 
   return (
     <div className="auth-container">
+      {showForgotPassword && (
+        <ForgotPasswordModal onClose={() => setShowForgotPassword(false)} />
+      )}
+
       <div className="auth-header">
         {/* Transparent Image Logo */}
         <IngreLensLogo size={190} />
@@ -146,19 +244,28 @@ function LoginScreen({ onLogin, onGoToSignUp, error }) {
             className="input-underline"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter your email"
+            placeholder="Enter your email address"
             required
           />
         </div>
 
         <div className="form-group">
-          <label>Password</label>
+          <div className="flex justify-between items-center">
+            <label>Password</label>
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-xs font-semibold text-[#00C853] hover:underline mb-1"
+            >
+              Forgot Password?
+            </button>
+          </div>
           <input
             type="password"
             className="input-underline"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter password"
+            placeholder="Enter your password"
             required
           />
         </div>
@@ -184,10 +291,15 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [validationError, setValidationError] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (password !== confirmPassword) return
+    if (password !== confirmPassword) {
+      setValidationError('Passwords do not match. Please ensure both passwords are identical.')
+      return
+    }
+    setValidationError('')
     onSignUpSuccess({ email: email.trim().toLowerCase(), password, name: fullName.trim() })
   }
 
@@ -220,7 +332,7 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
             className="input-underline"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="sarah@example.com"
+            placeholder="Enter your email address"
             required
           />
         </div>
@@ -231,7 +343,10 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
             type="password"
             className="input-underline"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value)
+              if (validationError) setValidationError('')
+            }}
             placeholder="Create password"
             required
           />
@@ -243,7 +358,10 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
             type="password"
             className="input-underline"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value)
+              if (validationError) setValidationError('')
+            }}
             placeholder="Confirm password"
             required
           />
@@ -253,9 +371,14 @@ function SignUpScreen({ onSignUpSuccess, onGoToLogin, error }) {
           Sign Up <ArrowRight size={18} />
         </button>
         {password && confirmPassword && password !== confirmPassword && (
-          <p className="text-xs text-[#D32F2F] text-center">Passwords do not match.</p>
+          <p className="text-xs font-semibold text-[#D32F2F] text-center mt-1">
+            ⚠️ Passwords do not match
+          </p>
         )}
-        {error && <p className="text-xs text-[#D32F2F] text-center">{error}</p>}
+        {validationError && (
+          <p className="text-xs font-semibold text-[#D32F2F] text-center mt-1">{validationError}</p>
+        )}
+        {error && <p className="text-xs text-[#D32F2F] text-center mt-1">{error}</p>}
       </form>
 
       <div className="auth-actions text-center pb-4">

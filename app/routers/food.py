@@ -3,7 +3,11 @@ from sqlalchemy.orm import Session
 from app.services.ai import detect_additives, ai_explanation
 import cv2
 import numpy as np
-from pyzbar.pyzbar import decode
+try:
+    from pyzbar.pyzbar import decode
+except Exception:
+    decode = None
+
 import os
 import uuid
 
