@@ -10,11 +10,18 @@ from sqlalchemy.orm import Session
 
 import cv2
 import numpy as np
-import easyocr
 import uuid
 import os
 
-from pyzbar.pyzbar import decode
+try:
+    import easyocr
+except Exception:
+    easyocr = None
+
+try:
+    from pyzbar.pyzbar import decode
+except Exception:
+    decode = None
 
 from app.dependencies import (
     get_db,
@@ -23,8 +30,6 @@ from app.dependencies import (
 
 from app import models
 
-
-# Medicine service functions
 from app.services.medicine import (
     extract_batch_number,
     extract_expiry,
@@ -33,8 +38,6 @@ from app.services.medicine import (
     calculate_counterfeit_score
 )
 
-
-# Packaging service functions
 from app.services.packaging import (
     analyze_image_quality,
     detect_packaging_edges,
@@ -48,19 +51,69 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------
-# EasyOCR
-# ---------------------------------------
+# --------------------------------------------------
+# OCR
+# --------------------------------------------------
 
-reader = easyocr.Reader(
-    ["en"],
-    gpu=False
-)
+reader = None
 
 
-# ---------------------------------------
-# Medicine scan endpoint
-# ---------------------------------------
+def get_ocr_reader():
+    global reader
+
+    if reader is None:
+
+        if easyocr is None:
+            raise HTTPException(
+                status_code=500,
+                detail="EasyOCR is not installed."
+            )
+
+        reader = easyocr.Reader(
+            ["en"],
+            gpu=False
+        )
+
+    return reader
+
+
+# --------------------------------------------------
+# QR / Barcode detection
+# --------------------------------------------------
+
+def detect_codes(frame):
+
+    qr_detector = cv2.QRCodeDetector()
+
+    qr_value, points, _ = qr_detector.detectAndDecode(frame)
+
+    if qr_value:
+        return True, qr_value, "QR"
+
+    if decode is not None:
+
+        try:
+
+            detected = decode(frame)
+
+            if detected:
+
+                value = detected[0].data.decode(
+                    "utf-8",
+                    errors="ignore"
+                )
+
+                return True, value, "BARCODE"
+
+        except Exception:
+            pass
+
+    return False, None, None
+
+
+# --------------------------------------------------
+# Medicine scan
+# --------------------------------------------------
 
 @router.post("/scan")
 async def scan_medicine(
@@ -74,10 +127,6 @@ async def scan_medicine(
     )
 ):
 
-    # =====================================
-    # 1. Read uploaded image
-    # =====================================
-
     contents = await image.read()
 
     if not contents:
@@ -88,9 +137,9 @@ async def scan_medicine(
         )
 
 
-    # =====================================
-    # 2. Convert image to OpenCV format
-    # =====================================
+    # --------------------------------------------------
+    # Convert image
+    # --------------------------------------------------
 
     np_image = np.frombuffer(
         contents,
@@ -110,23 +159,27 @@ async def scan_medicine(
         )
 
 
-    # =====================================
-    # 3. Save image temporarily
-    # =====================================
+    # --------------------------------------------------
+    # Temporary file
+    # --------------------------------------------------
 
     filename = f"{uuid.uuid4()}.jpg"
 
-    filepath = os.path.join(
+    upload_dir = os.path.join(
         "app",
-        "uploads",
+        "uploads"
+    )
+
+    os.makedirs(
+        upload_dir,
+        exist_ok=True
+    )
+
+    filepath = os.path.join(
+        upload_dir,
         filename
     )
 
-    # Create uploads directory if needed
-    os.makedirs(
-        os.path.dirname(filepath),
-        exist_ok=True
-    )
 
     with open(filepath, "wb") as f:
         f.write(contents)
@@ -134,38 +187,22 @@ async def scan_medicine(
 
     try:
 
-        # =================================
-        # 4. QR / Barcode detection
-        # =================================
+        # --------------------------------------------------
+        # QR / Barcode
+        # --------------------------------------------------
 
-        qr_data = decode(frame)
-
-        qr_found = len(qr_data) > 0
-
-        qr_value = None
-
-        if qr_found:
-
-            try:
-
-                qr_value = (
-                    qr_data[0]
-                    .data
-                    .decode("utf-8")
-                )
-
-            except UnicodeDecodeError:
-
-                qr_value = str(
-                    qr_data[0].data
-                )
+        code_found, code_value, code_type = detect_codes(
+            frame
+        )
 
 
-        # =================================
-        # 5. OCR
-        # =================================
+        # --------------------------------------------------
+        # OCR
+        # --------------------------------------------------
 
-        results = reader.readtext(
+        ocr_reader = get_ocr_reader()
+
+        results = ocr_reader.readtext(
             filepath
         )
 
@@ -175,84 +212,34 @@ async def scan_medicine(
         )
 
 
-        # =================================
-        # 6. Extract medicine information
-        # =================================
+        # --------------------------------------------------
+        # Extract information
+        # --------------------------------------------------
 
-        batch = extract_batch_number(
+        batch = extract_batch_number(text)
+
+        expiry = extract_expiry(text)
+
+        medicine_name = extract_medicine_name(
             text
         )
 
-        expiry = extract_expiry(
-            text
-        )
 
-        medicine_name = extract_medicine_name(text)
-        image_quality_score, image_issues = analyze_image_quality(filepath)
+        # --------------------------------------------------
+        # Image quality
+        # --------------------------------------------------
 
-        packaging_edges = detect_packaging_edges(filepath)
-
-        packaging_risk, packaging_confidence, packaging_reasons = (
-            calculate_packaging_risk(
-                image_quality_score,
-                packaging_edges
-            )
-        )
-
-        # =================================
-        # 7. Verify medicine
-        # =================================
-
-        verified = verify_medicine(
-            medicine_name
+        image_quality_score, image_issues = (
+            analyze_image_quality(filepath)
         )
 
 
-        # =================================
-        # 8. Calculate data risk
-        # =================================
+        # --------------------------------------------------
+        # Packaging
+        # --------------------------------------------------
 
-        (
-            risk,
-            confidence,
-            reasons
-        ) = calculate_counterfeit_score(
-
-            qr_found=qr_found,
-
-            batch_found=(
-                batch is not None
-            ),
-
-            expiry_found=(
-                expiry is not None
-            ),
-
-            verified=(
-                verified is not None
-            )
-        )
-        combined_risk = round((risk * 0.7) +(packaging_risk * 0.3))
-
-        combined_confidence = 100 - combined_risk
-
-
-        # =================================
-        # 9. Analyze packaging
-        # =================================
-
-        (
-            image_quality_score,
-            image_issues
-        ) = analyze_image_quality(
+        packaging_edges = detect_packaging_edges(
             filepath
-        )
-
-
-        packaging_edges = (
-            detect_packaging_edges(
-                filepath
-            )
         )
 
 
@@ -261,19 +248,46 @@ async def scan_medicine(
             packaging_confidence,
             packaging_reasons
         ) = calculate_packaging_risk(
-
             image_quality_score,
-
             packaging_edges
         )
 
 
-        # =================================
-        # 10. Combine risk scores
-        # =================================
+        # --------------------------------------------------
+        # Medicine verification
+        # --------------------------------------------------
+
+        verified = verify_medicine(
+            medicine_name
+        )
+
+
+        # --------------------------------------------------
+        # Counterfeit score
+        # --------------------------------------------------
+
+        (
+            data_risk,
+            data_confidence,
+            reasons
+        ) = calculate_counterfeit_score(
+
+            qr_found=code_found,
+
+            batch_found=batch is not None,
+
+            expiry_found=expiry is not None,
+
+            verified=verified is not None
+        )
+
+
+        # --------------------------------------------------
+        # Combined score
+        # --------------------------------------------------
 
         combined_risk = round(
-            (risk * 0.70)
+            (data_risk * 0.70)
             +
             (packaging_risk * 0.30)
         )
@@ -288,22 +302,20 @@ async def scan_medicine(
         )
 
 
-        # =================================
-        # 11. Combine all warnings
-        # =================================
+        # --------------------------------------------------
+        # Reasons
+        # --------------------------------------------------
 
         all_reasons = (
             reasons
-            +
-            packaging_reasons
-            +
-            image_issues
+            + packaging_reasons
+            + image_issues
         )
 
 
-        # =================================
-        # 12. Save scan history
-        # =================================
+        # --------------------------------------------------
+        # Save history
+        # --------------------------------------------------
 
         scan = models.MedicineScan(
 
@@ -313,9 +325,10 @@ async def scan_medicine(
 
             batch_number=batch,
 
-            qr_verified=qr_found,
+            qr_verified=code_found,
 
             packaging_score=packaging_confidence
+
         )
 
         db.add(scan)
@@ -323,46 +336,61 @@ async def scan_medicine(
         db.commit()
 
 
-        # =================================
-        # 13. Return result
-        # =================================
+        # --------------------------------------------------
+        # Response
+        # --------------------------------------------------
 
         return {
-    "medicine_name": medicine_name,
 
-    "qr_found": qr_found,
-    "qr_value": qr_value,
+            "success": True,
 
-    "batch_number": batch,
-    "expiry_date": expiry,
+            "mode": "MEDICINE",
 
-    "database_verified": verified is not None,
+            "medicine_name": medicine_name,
 
-    "data_risk": risk,
-    "data_confidence": confidence,
+            "ocr_text": text,
 
-    "packaging_risk": packaging_risk,
-    "packaging_confidence": packaging_confidence,
+            "code_found": code_found,
 
-    "combined_counterfeit_risk": combined_risk,
-    "combined_confidence": combined_confidence,
+            "code_type": code_type,
 
-    "image_quality_score": image_quality_score,
+            "code_value": code_value,
 
-    "packaging_analysis": {
-        "edge_detected": packaging_edges["edge_detected"],
-        "edge_density": packaging_edges["edge_density"]
-    },
+            "batch_number": batch,
 
-    "reasons": all_reasons
-   } 
+            "expiry_date": expiry,
+
+            "database_verified": verified is not None,
+
+            "data_risk": data_risk,
+
+            "data_confidence": data_confidence,
+
+            "packaging_risk": packaging_risk,
+
+            "packaging_confidence": packaging_confidence,
+
+            "combined_counterfeit_risk": combined_risk,
+
+            "combined_confidence": combined_confidence,
+
+            "image_quality_score": image_quality_score,
+
+            "packaging_analysis": {
+
+                "edge_detected":
+                    packaging_edges["edge_detected"],
+
+                "edge_density":
+                    packaging_edges["edge_density"]
+
+            },
+
+            "reasons": all_reasons
+        }
 
 
     finally:
-
-        # =================================
-        # 14. Delete temporary image
-        # =================================
 
         if os.path.exists(filepath):
 

@@ -1,19 +1,42 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File,
+    Depends,
+    HTTPException
+)
+
 from sqlalchemy.orm import Session
-from app.services.ai import detect_additives, ai_explanation
+
 import cv2
 import numpy as np
-from pyzbar.pyzbar import decode
 import os
 import uuid
 
-from app.dependencies import get_db, get_current_user
+try:
+    from pyzbar.pyzbar import decode
+except Exception:
+    decode = None
+
+
+from app.dependencies import (
+    get_db,
+    get_current_user
+)
+
 from app import models
+
+from app.services.ai import (
+    detect_additives,
+    ai_explanation
+)
+
 from app.services.nutrition import (
     get_product,
     calculate_safety_score,
     extract_text_from_image
 )
+
 
 router = APIRouter(
     prefix="/food",
@@ -21,100 +44,297 @@ router = APIRouter(
 )
 
 
+def detect_food_code(frame):
+
+    # First try OpenCV QR detector
+
+    qr_detector = cv2.QRCodeDetector()
+
+    qr_value, points, _ = (
+        qr_detector.detectAndDecode(frame)
+    )
+
+    if qr_value:
+
+        return qr_value
+
+
+    # Then try barcode detector
+
+    if decode is not None:
+
+        try:
+
+            detected = decode(frame)
+
+            if detected:
+
+                return detected[0].data.decode(
+                    "utf-8",
+                    errors="ignore"
+                )
+
+        except Exception:
+            pass
+
+
+    return None
+
+
 @router.post("/scan")
 async def scan_food(
+
     image: UploadFile = File(...),
+
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+
+    current_user: models.User = Depends(
+        get_current_user
+    )
+
 ):
-    # Read uploaded image
+
     contents = await image.read()
 
-    np_image = np.frombuffer(contents, np.uint8)
-    frame = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
+    if not contents:
 
-    # Save image temporarily for OCR
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded image is empty"
+        )
+
+
+    np_image = np.frombuffer(
+        contents,
+        np.uint8
+    )
+
+    frame = cv2.imdecode(
+        np_image,
+        cv2.IMREAD_COLOR
+    )
+
+    if frame is None:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image file"
+        )
+
+
+    # --------------------------------------------------
+    # Save image temporarily
+    # --------------------------------------------------
+
+    upload_dir = os.path.join(
+        "app",
+        "uploads"
+    )
+
+    os.makedirs(
+        upload_dir,
+        exist_ok=True
+    )
+
+
     filename = f"{uuid.uuid4()}.jpg"
-    filepath = os.path.join("app", "uploads", filename)
+
+    filepath = os.path.join(
+        upload_dir,
+        filename
+    )
+
 
     with open(filepath, "wb") as f:
         f.write(contents)
 
+
     try:
-        # Detect barcode
-        decoded = decode(frame)
 
-        # ---------- OCR FALLBACK ----------
-        if not decoded:
-            text = extract_text_from_image(filepath)
-            additives = detect_additives(text)
+        # --------------------------------------------------
+        # Barcode / QR
+        # --------------------------------------------------
 
-            return {
-                "mode": "OCR",
-                "ingredients_text": text,
-                "detected_additives": additives,
-                "message": "No barcode detected. OCR analysis completed."
-            }
+        barcode = detect_food_code(
+            frame
+        )
 
-        # Barcode found
-        barcode = decoded[0].data.decode("utf-8")
 
-        # Fetch product details
-        product = get_product(barcode)
+        # --------------------------------------------------
+        # OCR fallback
+        # --------------------------------------------------
 
-        if not product:
-            raise HTTPException(
-                status_code=404,
-                detail="Product not found"
+        if not barcode:
+
+            text = extract_text_from_image(
+                filepath
             )
 
-        # Get user's health profile
-        profile = db.query(models.HealthProfile).filter(
-            models.HealthProfile.user_id == current_user.id
+            additives = detect_additives(
+                text
+            )
+
+            return {
+
+                "success": True,
+
+                "mode": "OCR",
+
+                "ingredients_text": text,
+
+                "detected_additives": additives,
+
+                "message":
+                    "No barcode detected. OCR analysis completed."
+
+            }
+
+
+        # --------------------------------------------------
+        # Product lookup
+        # --------------------------------------------------
+
+        product = get_product(
+            barcode
+        )
+
+
+        if not product:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Product not found for this barcode"
+            )
+
+
+        # --------------------------------------------------
+        # Health profile
+        # --------------------------------------------------
+
+        profile = db.query(
+            models.HealthProfile
+        ).filter(
+            models.HealthProfile.user_id ==
+            current_user.id
         ).first()
 
+
         if not profile:
+
             raise HTTPException(
                 status_code=404,
                 detail="Health profile not found"
             )
 
-        # Calculate personalized score
-        score, warnings = calculate_safety_score(product, profile)
 
-        # Detect additives
-        ingredients = product.get("ingredients_text", "")
-        additives = detect_additives(ingredients)
+        # --------------------------------------------------
+        # Safety score
+        # --------------------------------------------------
 
-        # Generate AI explanation
-        explanation = ai_explanation(score, warnings, additives)
-
-        # Save scan history
-        scan = models.ScanHistory(
-            user_id=current_user.id,
-            product_name=product.get("product_name"),
-            safety_score=score,
-            risk_message=", ".join(warnings)
+        score, warnings = (
+            calculate_safety_score(
+                product,
+                profile
+            )
         )
 
+
+        # --------------------------------------------------
+        # Additives
+        # --------------------------------------------------
+
+        ingredients = (
+            product.get(
+                "ingredients_text",
+                ""
+            )
+        )
+
+
+        additives = detect_additives(
+            ingredients
+        )
+
+
+        # --------------------------------------------------
+        # AI explanation
+        # --------------------------------------------------
+
+        explanation = ai_explanation(
+            score,
+            warnings,
+            additives
+        )
+
+
+        # --------------------------------------------------
+        # Save history
+        # --------------------------------------------------
+
+        scan = models.ScanHistory(
+
+            user_id=current_user.id,
+
+            product_name=
+                product.get("product_name"),
+
+            safety_score=score,
+
+            risk_message=
+                ", ".join(warnings)
+
+        )
+
+
         db.add(scan)
+
         db.commit()
 
-        # Return response
+
+        # --------------------------------------------------
+        # Return
+        # --------------------------------------------------
+
         return {
-            "mode": "Barcode",
+
+            "success": True,
+
+            "mode": "BARCODE",
+
             "barcode": barcode,
-            "product_name": product.get("product_name"),
-            "brand": product.get("brands"),
-            "nutrition_grade": product.get("nutrition_grades"),
-            "nova_group": product.get("nova_group"),
-            "safety_score": score,
-            "warnings": warnings,
-            "detected_additives": additives,
-            "ai_explanation": explanation
+
+            "product_name":
+                product.get("product_name"),
+
+            "brand":
+                product.get("brands"),
+
+            "ingredients_text":
+                product.get("ingredients_text"),
+
+            "nutrition_grade":
+                product.get("nutrition_grades"),
+
+            "nova_group":
+                product.get("nova_group"),
+
+            "safety_score":
+                score,
+
+            "warnings":
+                warnings,
+
+            "detected_additives":
+                additives,
+
+            "ai_explanation":
+                explanation
+
         }
 
+
     finally:
-        # Delete temporary uploaded image
+
         if os.path.exists(filepath):
+
             os.remove(filepath)
