@@ -71,3 +71,49 @@ def get_me(
     current_user: models.User = Depends(get_current_user)
 ):
     return current_user
+
+
+@router.post("/forgot-password")
+def forgot_password(user: schemas.UserLogin):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    sender_email = "ingrelens1app@gmail.com"
+    app_password = "sfunuwxviqglzvvg"
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "IngreLens - Reset Your Password"
+        msg["From"] = f"IngreLens Support <{sender_email}>"
+        msg["To"] = user.email
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; rounded: 12px;">
+            <h2 style="color: #00C853; text-align: center;">IngreLens Password Reset</h2>
+            <p>Hello,</p>
+            <p>We received a request to reset your password for your <strong>IngreLens</strong> health shield account.</p>
+            <p>Click the link below to set a new password:</p>
+            <div style="text-align: center; margin: 25px 0;">
+                <a href="http://localhost:5173/reset-password?email={user.email}" 
+                   style="background-color: #00C853; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                    Reset Password
+                </a>
+            </div>
+            <p style="color: #777; font-size: 12px;">If you did not request this password reset, please ignore this email.</p>
+        </div>
+        """
+
+        msg.attach(MIMEText(html_content, "html"))
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(sender_email, app_password)
+        server.sendmail(sender_email, user.email, msg.as_string())
+        server.quit()
+
+        return {"message": f"Password reset email sent successfully to {user.email}"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+

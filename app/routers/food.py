@@ -13,11 +13,20 @@ import numpy as np
 import os
 import uuid
 
+
+# ==================================================
+# QR / BARCODE
+# ==================================================
+
 try:
     from pyzbar.pyzbar import decode
 except Exception:
     decode = None
 
+
+# ==================================================
+# APP IMPORTS
+# ==================================================
 
 from app.dependencies import (
     get_db,
@@ -38,15 +47,32 @@ from app.services.nutrition import (
 )
 
 
+# ==================================================
+# ROUTER
+# ==================================================
+
 router = APIRouter(
     prefix="/food",
     tags=["Food Scanner"]
 )
 
 
-def detect_food_code(frame):
+# ==================================================
+# QR / BARCODE DETECTION
+# ==================================================
 
+def detect_food_code(frame):
+    """
+    Detect QR code or barcode from the uploaded image.
+
+    Returns:
+        str: Detected QR/barcode value
+        None: If no code was detected
+    """
+
+    # --------------------------------------------------
     # First try OpenCV QR detector
+    # --------------------------------------------------
 
     qr_detector = cv2.QRCodeDetector()
 
@@ -55,11 +81,12 @@ def detect_food_code(frame):
     )
 
     if qr_value:
-
         return qr_value
 
 
+    # --------------------------------------------------
     # Then try barcode detector
+    # --------------------------------------------------
 
     if decode is not None:
 
@@ -78,8 +105,16 @@ def detect_food_code(frame):
             pass
 
 
+    # --------------------------------------------------
+    # Nothing detected
+    # --------------------------------------------------
+
     return None
 
+
+# ==================================================
+# FOOD SCANNER
+# ==================================================
 
 @router.post("/scan")
 async def scan_food(
@@ -94,6 +129,10 @@ async def scan_food(
 
 ):
 
+    # ==================================================
+    # READ IMAGE
+    # ==================================================
+
     contents = await image.read()
 
     if not contents:
@@ -103,6 +142,10 @@ async def scan_food(
             detail="Uploaded image is empty"
         )
 
+
+    # ==================================================
+    # CONVERT IMAGE
+    # ==================================================
 
     np_image = np.frombuffer(
         contents,
@@ -122,9 +165,9 @@ async def scan_food(
         )
 
 
-    # --------------------------------------------------
-    # Save image temporarily
-    # --------------------------------------------------
+    # ==================================================
+    # SAVE IMAGE TEMPORARILY
+    # ==================================================
 
     upload_dir = os.path.join(
         "app",
@@ -135,7 +178,6 @@ async def scan_food(
         upload_dir,
         exist_ok=True
     )
-
 
     filename = f"{uuid.uuid4()}.jpg"
 
@@ -151,18 +193,18 @@ async def scan_food(
 
     try:
 
-        # --------------------------------------------------
-        # Barcode / QR
-        # --------------------------------------------------
+        # ==================================================
+        # BARCODE / QR
+        # ==================================================
 
         barcode = detect_food_code(
             frame
         )
 
 
-        # --------------------------------------------------
-        # OCR fallback
-        # --------------------------------------------------
+        # ==================================================
+        # OCR FALLBACK
+        # ==================================================
 
         if not barcode:
 
@@ -185,19 +227,19 @@ async def scan_food(
                 "detected_additives": additives,
 
                 "message":
-                    "No barcode detected. OCR analysis completed."
+                    "No barcode detected. "
+                    "OCR analysis completed."
 
             }
 
 
-        # --------------------------------------------------
-        # Product lookup
-        # --------------------------------------------------
+        # ==================================================
+        # PRODUCT LOOKUP
+        # ==================================================
 
         product = get_product(
             barcode
         )
-
 
         if not product:
 
@@ -207,17 +249,20 @@ async def scan_food(
             )
 
 
-        # --------------------------------------------------
-        # Health profile
-        # --------------------------------------------------
+        # ==================================================
+        # HEALTH PROFILE
+        # ==================================================
 
-        profile = db.query(
-            models.HealthProfile
-        ).filter(
-            models.HealthProfile.user_id ==
-            current_user.id
-        ).first()
-
+        profile = (
+            db.query(
+                models.HealthProfile
+            )
+            .filter(
+                models.HealthProfile.user_id
+                == current_user.id
+            )
+            .first()
+        )
 
         if not profile:
 
@@ -227,9 +272,9 @@ async def scan_food(
             )
 
 
-        # --------------------------------------------------
-        # Safety score
-        # --------------------------------------------------
+        # ==================================================
+        # SAFETY SCORE
+        # ==================================================
 
         score, warnings = (
             calculate_safety_score(
@@ -239,26 +284,23 @@ async def scan_food(
         )
 
 
-        # --------------------------------------------------
-        # Additives
-        # --------------------------------------------------
+        # ==================================================
+        # ADDITIVES
+        # ==================================================
 
-        ingredients = (
-            product.get(
-                "ingredients_text",
-                ""
-            )
+        ingredients = product.get(
+            "ingredients_text",
+            ""
         )
-
 
         additives = detect_additives(
             ingredients
         )
 
 
-        # --------------------------------------------------
-        # AI explanation
-        # --------------------------------------------------
+        # ==================================================
+        # AI EXPLANATION
+        # ==================================================
 
         explanation = ai_explanation(
             score,
@@ -267,9 +309,9 @@ async def scan_food(
         )
 
 
-        # --------------------------------------------------
-        # Save history
-        # --------------------------------------------------
+        # ==================================================
+        # SAVE SCAN HISTORY
+        # ==================================================
 
         scan = models.ScanHistory(
 
@@ -285,15 +327,14 @@ async def scan_food(
 
         )
 
-
         db.add(scan)
 
         db.commit()
 
 
-        # --------------------------------------------------
-        # Return
-        # --------------------------------------------------
+        # ==================================================
+        # RESPONSE
+        # ==================================================
 
         return {
 
@@ -333,8 +374,31 @@ async def scan_food(
         }
 
 
+    except HTTPException:
+        # Preserve FastAPI HTTP errors
+        raise
+
+
+    except Exception as e:
+
+        # Roll back database changes if something fails
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Food scan failed: {str(e)}"
+        )
+
+
     finally:
+
+        # ==================================================
+        # DELETE TEMPORARY FILE
+        # ==================================================
 
         if os.path.exists(filepath):
 
-            os.remove(filepath)
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass

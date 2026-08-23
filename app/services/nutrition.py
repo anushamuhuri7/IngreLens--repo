@@ -1,9 +1,20 @@
 import requests
-import easyocr
+try:
+    import easyocr
+except Exception:
+    easyocr = None
+
 import cv2
 
 BASE_URL = "https://world.openfoodfacts.net/api/v2/product"
-reader = easyocr.Reader(["en"], gpu=False)
+reader = None
+
+def get_ocr_reader():
+    global reader
+    if reader is None and easyocr is not None:
+        reader = easyocr.Reader(["en"], gpu=False)
+    return reader
+
 def get_product(barcode: str):
 
     fields = ",".join([

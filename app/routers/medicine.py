@@ -13,15 +13,29 @@ import numpy as np
 import uuid
 import os
 
+# --------------------------------------------------
+# EasyOCR
+# --------------------------------------------------
+
 try:
     import easyocr
 except Exception:
     easyocr = None
 
+
+# --------------------------------------------------
+# QR / Barcode
+# --------------------------------------------------
+
 try:
     from pyzbar.pyzbar import decode
 except Exception:
     decode = None
+
+
+# --------------------------------------------------
+# App imports
+# --------------------------------------------------
 
 from app.dependencies import (
     get_db,
@@ -45,20 +59,31 @@ from app.services.packaging import (
 )
 
 
+# --------------------------------------------------
+# Router
+# --------------------------------------------------
+
 router = APIRouter(
     prefix="/medicine",
     tags=["Medicine Scanner"]
 )
 
 
-# --------------------------------------------------
+# ==================================================
 # OCR
-# --------------------------------------------------
+# ==================================================
 
 reader = None
 
 
 def get_ocr_reader():
+    """
+    Create and return the EasyOCR reader.
+
+    The reader is initialized only once because
+    loading EasyOCR is expensive.
+    """
+
     global reader
 
     if reader is None:
@@ -77,18 +102,37 @@ def get_ocr_reader():
     return reader
 
 
-# --------------------------------------------------
-# QR / Barcode detection
-# --------------------------------------------------
+# ==================================================
+# QR / BARCODE DETECTION
+# ==================================================
 
 def detect_codes(frame):
+    """
+    Detect QR code or barcode from an OpenCV image.
+
+    Returns:
+        (True, value, "QR")
+        (True, value, "BARCODE")
+        (False, None, None)
+    """
+
+    # --------------------------------------------------
+    # QR Code
+    # --------------------------------------------------
 
     qr_detector = cv2.QRCodeDetector()
 
-    qr_value, points, _ = qr_detector.detectAndDecode(frame)
+    qr_value, points, _ = qr_detector.detectAndDecode(
+        frame
+    )
 
     if qr_value:
         return True, qr_value, "QR"
+
+
+    # --------------------------------------------------
+    # Barcode using pyzbar
+    # --------------------------------------------------
 
     if decode is not None:
 
@@ -108,12 +152,17 @@ def detect_codes(frame):
         except Exception:
             pass
 
+
+    # --------------------------------------------------
+    # Nothing found
+    # --------------------------------------------------
+
     return False, None, None
 
 
-# --------------------------------------------------
-# Medicine scan
-# --------------------------------------------------
+# ==================================================
+# MEDICINE SCAN
+# ==================================================
 
 @router.post("/scan")
 async def scan_medicine(
@@ -127,6 +176,10 @@ async def scan_medicine(
     )
 ):
 
+    # --------------------------------------------------
+    # Read uploaded image
+    # --------------------------------------------------
+
     contents = await image.read()
 
     if not contents:
@@ -137,9 +190,9 @@ async def scan_medicine(
         )
 
 
-    # --------------------------------------------------
-    # Convert image
-    # --------------------------------------------------
+    # ==================================================
+    # Convert image to OpenCV format
+    # ==================================================
 
     np_image = np.frombuffer(
         contents,
@@ -159,9 +212,9 @@ async def scan_medicine(
         )
 
 
-    # --------------------------------------------------
-    # Temporary file
-    # --------------------------------------------------
+    # ==================================================
+    # Create temporary file
+    # ==================================================
 
     filename = f"{uuid.uuid4()}.jpg"
 
@@ -187,18 +240,18 @@ async def scan_medicine(
 
     try:
 
-        # --------------------------------------------------
-        # QR / Barcode
-        # --------------------------------------------------
+        # ==================================================
+        # QR / BARCODE
+        # ==================================================
 
         code_found, code_value, code_type = detect_codes(
             frame
         )
 
 
-        # --------------------------------------------------
+        # ==================================================
         # OCR
-        # --------------------------------------------------
+        # ==================================================
 
         ocr_reader = get_ocr_reader()
 
@@ -212,36 +265,41 @@ async def scan_medicine(
         )
 
 
-        # --------------------------------------------------
-        # Extract information
-        # --------------------------------------------------
+        # ==================================================
+        # EXTRACT MEDICINE INFORMATION
+        # ==================================================
 
-        batch = extract_batch_number(text)
+        batch = extract_batch_number(
+            text
+        )
 
-        expiry = extract_expiry(text)
+        expiry = extract_expiry(
+            text
+        )
 
         medicine_name = extract_medicine_name(
             text
         )
 
 
-        # --------------------------------------------------
-        # Image quality
-        # --------------------------------------------------
+        # ==================================================
+        # IMAGE QUALITY
+        # ==================================================
 
         image_quality_score, image_issues = (
-            analyze_image_quality(filepath)
+            analyze_image_quality(
+                filepath
+            )
         )
 
 
-        # --------------------------------------------------
-        # Packaging
-        # --------------------------------------------------
+        # ==================================================
+        # PACKAGING ANALYSIS
+        # ==================================================
 
         packaging_edges = detect_packaging_edges(
             filepath
         )
-
 
         (
             packaging_risk,
@@ -253,18 +311,18 @@ async def scan_medicine(
         )
 
 
-        # --------------------------------------------------
-        # Medicine verification
-        # --------------------------------------------------
+        # ==================================================
+        # MEDICINE VERIFICATION
+        # ==================================================
 
         verified = verify_medicine(
             medicine_name
         )
 
 
-        # --------------------------------------------------
-        # Counterfeit score
-        # --------------------------------------------------
+        # ==================================================
+        # COUNTERFEIT SCORE
+        # ==================================================
 
         (
             data_risk,
@@ -282,9 +340,9 @@ async def scan_medicine(
         )
 
 
-        # --------------------------------------------------
-        # Combined score
-        # --------------------------------------------------
+        # ==================================================
+        # COMBINED COUNTERFEIT SCORE
+        # ==================================================
 
         combined_risk = round(
             (data_risk * 0.70)
@@ -302,9 +360,9 @@ async def scan_medicine(
         )
 
 
-        # --------------------------------------------------
-        # Reasons
-        # --------------------------------------------------
+        # ==================================================
+        # COMBINE REASONS
+        # ==================================================
 
         all_reasons = (
             reasons
@@ -313,9 +371,9 @@ async def scan_medicine(
         )
 
 
-        # --------------------------------------------------
-        # Save history
-        # --------------------------------------------------
+        # ==================================================
+        # SAVE SCAN HISTORY
+        # ==================================================
 
         scan = models.MedicineScan(
 
@@ -336,9 +394,9 @@ async def scan_medicine(
         db.commit()
 
 
-        # --------------------------------------------------
-        # Response
-        # --------------------------------------------------
+        # ==================================================
+        # RESPONSE
+        # ==================================================
 
         return {
 
@@ -379,10 +437,16 @@ async def scan_medicine(
             "packaging_analysis": {
 
                 "edge_detected":
-                    packaging_edges["edge_detected"],
+                    packaging_edges.get(
+                        "edge_detected",
+                        False
+                    ),
 
                 "edge_density":
-                    packaging_edges["edge_density"]
+                    packaging_edges.get(
+                        "edge_density",
+                        0
+                    )
 
             },
 
@@ -390,8 +454,32 @@ async def scan_medicine(
         }
 
 
+    except HTTPException:
+        # Re-raise FastAPI errors without changing them
+        raise
+
+
+    except Exception as e:
+
+        # Rollback database transaction if something
+        # goes wrong after db.add()/db.commit()
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Medicine scan failed: {str(e)}"
+        )
+
+
     finally:
+
+        # ==================================================
+        # DELETE TEMPORARY FILE
+        # ==================================================
 
         if os.path.exists(filepath):
 
-            os.remove(filepath)
+            try:
+                os.remove(filepath)
+            except Exception:
+                pass
