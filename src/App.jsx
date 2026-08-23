@@ -25,23 +25,45 @@ import {
 import scanReference from '../assets/Gemini_Generated_Image_oedrlaoedrlaoedr.png'
 import logoImage from '../assets/Your_paragraph_text-removebg-preview.png'
 
-const USERS_STORAGE_KEY = 'ingrelens-users-v1'
-const CURRENT_USER_STORAGE_KEY = 'ingrelens-current-user-v1'
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+const AUTH_TOKEN_STORAGE_KEY = 'ingrelens-auth-token'
 
-function loadUsers() {
-  try {
-    return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '[]')
-  } catch {
-    return []
+async function api(path, { token, ...options } = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+  if (response.status === 204) return null
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.detail || 'Unable to reach the IngreLens service.')
+  return payload
+}
+
+function toHistoryItem(scan) {
+  return {
+    id: scan.id,
+    name: scan.product_name || 'Scanned food item',
+    type: 'Food',
+    date: new Date(scan.scanned_at).toLocaleDateString(),
+    score: Math.round(scan.safety_score / 10),
+    ingredients: scan.detected_ingredients.map((name) => ({ name, tag: 'Detected', isSafe: !scan.warnings.some((warning) => warning.toLowerCase().includes(name.toLowerCase())) })),
+    summary: scan.risk_message,
   }
 }
 
-function saveUsers(users) {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users))
-}
-
-function createUserId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+function profileFlags(profile) {
+  const text = [...(profile.allergies || []), ...(profile.conditions || [])].join(' ').toLowerCase()
+  return {
+    diabetes: text.includes('diabet'),
+    hypertension: text.includes('hypertension') || text.includes('high blood pressure'),
+    lactose_intolerant: text.includes('lactose') || text.includes('milk allergy'),
+    gluten_allergy: text.includes('gluten') || text.includes('celiac'),
+    nut_allergy: text.includes('nut') || text.includes('peanut'),
+  }
 }
 
 function getExpiryStatus(expiryDate) {
@@ -130,26 +152,8 @@ function ForgotPasswordModal({ onClose }) {
     e.preventDefault()
     if (!email) return
     setLoading(true)
-    setResetError('')
-
-    try {
-      const response = await fetch('http://localhost:8000/users/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password: 'dummy' }),
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.detail || 'Failed to send password reset email.')
-      }
-
-      setSubmitted(true)
-    } catch (err) {
-      setResetError(err.message || 'Failed to send password reset email. Please ensure backend is running.')
-    } finally {
-      setLoading(false)
-    }
+    setResetError('Password reset email delivery has not been configured yet. Please contact the IngreLens team to reset your password.')
+    setLoading(false)
   }
 
   return (
@@ -584,15 +588,30 @@ function ScanModeModal({ isOpen, onClose, selectedMode, setSelectedMode, onConti
 }
 
 // --- Live Camera & Scanning View (/scan) ---
-function LiveCameraView({ mode, onScanComplete, onBack }) {
+function LiveCameraView({ mode, onScanComplete, onBack, token }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [image, setImage] = useState(null)
+  const [productName, setProductName] = useState('')
+  const [ingredients, setIngredients] = useState('')
+  const [error, setError] = useState('')
 
-  const handleCapture = () => {
+  const handleCapture = async () => {
+    if (mode === 'MEDICINE') return setError('Medicine scanning is not connected yet. Choose Food scan to use the backend.')
+    if (!image) return setError('Choose a label image to scan.')
     setIsAnalyzing(true)
-    setTimeout(() => {
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('image', image)
+      if (productName.trim()) formData.append('product_name', productName.trim())
+      if (ingredients.trim()) formData.append('ingredients', ingredients.trim())
+      const result = await api('/food/scan', { method: 'POST', body: formData, token })
+      onScanComplete(toHistoryItem(result))
+    } catch (scanError) {
+      setError(scanError.message)
+    } finally {
       setIsAnalyzing(false)
-      onScanComplete()
-    }, 2000)
+    }
   }
 
   return (
@@ -624,7 +643,14 @@ function LiveCameraView({ mode, onScanComplete, onBack }) {
 
       {/* Bottom Shutter Controls */}
       <div className="camera-controls">
-        <p className="text-xs text-gray-300">Tap shutter to capture & evaluate ingredients</p>
+        <p className="text-xs text-gray-300">Upload a food-label image, then evaluate it against your profile.</p>
+        <label className="btn-secondary text-xs cursor-pointer">
+          {image ? image.name : 'Choose label image'}
+          <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => setImage(event.target.files?.[0] || null)} />
+        </label>
+        <input className="w-full rounded-lg p-2 text-xs text-[#212121]" value={productName} onChange={(event) => setProductName(event.target.value)} placeholder="Product name (optional)" />
+        <textarea className="w-full rounded-lg p-2 text-xs text-[#212121]" value={ingredients} onChange={(event) => setIngredients(event.target.value)} placeholder="Ingredients, comma separated (needed if no QR/barcode is found)" rows="2" />
+        {error && <p className="text-xs text-[#FFCDD2]">{error}</p>}
         <button className="shutter-btn" onClick={handleCapture} title="Capture Label">
           <Aperture size={36} className="text-[#00C853]" />
         </button>
@@ -701,8 +727,8 @@ function ScanResultsScreen({ item, mode, userProfile, onBack, onSave }) {
         modeName: `${item.type} Analysis`,
         itemName: item.name,
         score: item.score,
-        summary: item.score >= 8 ? 'Great fit for your health profile!' : 'Contains ingredients flagging high risk.',
-        ingredients: defaultFoodResult.ingredients
+        summary: item.summary || (item.score >= 8 ? 'Great fit for your health profile!' : 'Contains ingredients flagging high risk.'),
+        ingredients: item.ingredients || defaultFoodResult.ingredients
       }
     : mode === 'MEDICINE'
       ? defaultMedicineResult
@@ -868,7 +894,7 @@ function ScanResultsScreen({ item, mode, userProfile, onBack, onSave }) {
       )}
 
       <button className="btn-primary mt-6" onClick={onSave}>
-        Save to History <Check size={18} />
+        View Scan History <Check size={18} />
       </button>
     </div>
   )
@@ -1279,46 +1305,73 @@ function ProfileCompletionModal({ initialName, onSave, onClose }) {
 
 // --- Main App Component ---
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState(() => localStorage.getItem(CURRENT_USER_STORAGE_KEY) ? 'home' : 'login') // login, signup, home, scan, results, profile, history
+  const [currentScreen, setCurrentScreen] = useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) ? 'home' : 'login') // login, signup, home, scan, results, profile, history
   const [selectedScanMode, setSelectedScanMode] = useState('FOOD') // FOOD or MEDICINE
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedResultItem, setSelectedResultItem] = useState(null)
-  const [users, setUsers] = useState(loadUsers)
-  const [currentUserId, setCurrentUserId] = useState(() => localStorage.getItem(CURRENT_USER_STORAGE_KEY))
+  const [users, setUsers] = useState([])
+  const [currentUserId, setCurrentUserId] = useState(null)
+  const [token, setToken] = useState(() => localStorage.getItem(AUTH_TOKEN_STORAGE_KEY))
   const [authError, setAuthError] = useState('')
   const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [historyError, setHistoryError] = useState('')
 
   const currentUser = users.find((user) => user.id === currentUserId)
 
-  const updateUsers = (nextUsers) => {
-    setUsers(nextUsers)
-    saveUsers(nextUsers)
-  }
+  const updateUsers = (nextUsers) => setUsers(nextUsers)
 
   const updateCurrentUser = (changes) => {
     updateUsers(users.map((user) => user.id === currentUserId ? { ...user, ...changes } : user))
   }
 
-  const handleLogin = (email, password) => {
-    const user = users.find((candidate) => candidate.email === email && candidate.password === password)
-    if (!user) return setAuthError('No matching account found. Please check your details or sign up.')
-    setAuthError('')
+  const loadSession = async (accessToken) => {
+    const [account, healthProfile, scans] = await Promise.all([
+      api('/users/me', { token: accessToken }),
+      api('/profile/me', { token: accessToken }),
+      api('/food/history', { token: accessToken }),
+    ])
+    const conditions = []
+    const allergies = []
+    if (healthProfile?.diabetes) conditions.push('Diabetes')
+    if (healthProfile?.hypertension) conditions.push('Hypertension')
+    if (healthProfile?.lactose_intolerant) allergies.push('Lactose intolerance')
+    if (healthProfile?.gluten_allergy) allergies.push('Gluten allergy')
+    if (healthProfile?.nut_allergy) allergies.push('Nut allergy')
+    const user = { ...account, age: '', image: '', goals: [], allergies, conditions, currentMedicines: [], history: scans.map(toHistoryItem) }
+    setUsers([user])
     setCurrentUserId(user.id)
-    localStorage.setItem(CURRENT_USER_STORAGE_KEY, user.id)
-    setCurrentScreen('home')
   }
 
-  const handleSignUpSuccess = ({ email, password, name }) => {
-    if (users.some((user) => user.email === email)) return setAuthError('An account with this email already exists.')
-    const newUser = { id: createUserId(), email, password, name: name || '', age: '', image: '', goals: [], allergies: [], conditions: [], currentMedicines: [], history: [] }
-    const nextUsers = [...users, newUser]
-    updateUsers(nextUsers)
-    setCurrentUserId(newUser.id)
-    localStorage.setItem(CURRENT_USER_STORAGE_KEY, newUser.id)
-    setAuthError('')
-    setCurrentScreen('home')
-    setProfileModalOpen(true)
+  useEffect(() => {
+    if (!token) return
+    loadSession(token).catch(() => {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+      setToken(null)
+      setCurrentScreen('login')
+    })
+  }, [])
+
+  const handleLogin = async (email, password) => {
+    try {
+      const result = await api('/users/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, result.access_token)
+      setToken(result.access_token)
+      await loadSession(result.access_token)
+      setAuthError('')
+      setCurrentScreen('home')
+    } catch (error) {
+      setAuthError(error.message)
+    }
+  }
+
+  const handleSignUpSuccess = async ({ email, password, name }) => {
+    try {
+      await api('/users/', { method: 'POST', body: JSON.stringify({ email, password, name }) })
+      await handleLogin(email, password)
+      setProfileModalOpen(true)
+    } catch (error) {
+      setAuthError(error.message)
+    }
   }
 
   const handleContinueFromModal = () => {
@@ -1326,28 +1379,27 @@ export default function App() {
     setCurrentScreen('scan')
   }
 
-  const handleScanComplete = () => {
-    setSelectedResultItem(null)
+  const handleScanComplete = (scan) => {
+    setSelectedResultItem(scan)
     setCurrentScreen('results')
   }
 
   const handleSaveScan = () => {
-    if (!currentUser) return
-    const scan = {
-      id: createUserId(),
-      name: selectedScanMode === 'MEDICINE' ? 'Paracetamol 500 mg' : 'Harvest Oat Granola',
-      type: selectedScanMode === 'MEDICINE' ? 'Medicine' : 'Food',
-      date: 'Just now',
-      score: 9
-    }
-    updateCurrentUser({ history: [scan, ...(currentUser.history || [])] })
     setCurrentScreen('history')
   }
 
-  const handleSaveProfile = (profile) => updateCurrentUser(profile)
-
-  const handleDeleteHistory = () => {
+  const handleSaveProfile = async (profile) => {
     try {
+      const savedProfile = await api('/profile/', { method: 'PUT', token, body: JSON.stringify(profileFlags(profile)) })
+      updateCurrentUser({ ...profile, healthProfile: savedProfile })
+    } catch (error) {
+      setAuthError(error.message)
+    }
+  }
+
+  const handleDeleteHistory = async () => {
+    try {
+      await api('/food/history', { method: 'DELETE', token })
       updateCurrentUser({ history: [] })
       setHistoryError('')
     } catch {
@@ -1357,7 +1409,9 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUserId(null)
-    localStorage.removeItem(CURRENT_USER_STORAGE_KEY)
+    setUsers([])
+    setToken(null)
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
     setSelectedResultItem(null)
     setCurrentScreen('login')
   }
@@ -1397,6 +1451,7 @@ export default function App() {
           mode={selectedScanMode}
           onScanComplete={handleScanComplete}
           onBack={() => setCurrentScreen('home')}
+          token={token}
         />
       )}
 

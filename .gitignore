@@ -16,7 +16,6 @@ __pycache__/
 *.pyd
 *.db
 *.sqlite3
-requirements.txt
 runtime.txt
 
 # Supabase local
