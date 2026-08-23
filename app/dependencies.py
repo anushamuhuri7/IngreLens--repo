@@ -15,7 +15,9 @@ from jose import (
 
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
+from app.database import (
+    SessionLocal
+)
 
 from app.auth import (
     SECRET_KEY,
@@ -63,7 +65,8 @@ def get_current_user(
         detail="Invalid token",
 
         headers={
-            "WWW-Authenticate": "Bearer"
+            "WWW-Authenticate":
+                "Bearer"
         }
 
     )
@@ -83,9 +86,11 @@ def get_current_user(
 
         )
 
+
         user_id = payload.get(
             "sub"
         )
+
 
         if user_id is None:
 

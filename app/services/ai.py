@@ -6,6 +6,10 @@ except Exception:
     genai = None
 
 
+# ==================================================
+# ADDITIVES
+# ==================================================
+
 ULTRA_PROCESSED_ADDITIVES = {
 
     "e322":
@@ -43,26 +47,47 @@ ULTRA_PROCESSED_ADDITIVES = {
 }
 
 
-def detect_additives(text: str):
+# ==================================================
+# ADDITIVE DETECTION
+# ==================================================
+
+def detect_additives(
+    text: str
+):
 
     if not text:
+
         return []
+
 
     text = text.lower()
 
     found = []
 
-    for code, name in ULTRA_PROCESSED_ADDITIVES.items():
+
+    for code, name in (
+        ULTRA_PROCESSED_ADDITIVES.items()
+    ):
 
         if code in text:
 
             found.append({
-                "code": code.upper(),
-                "name": name
+
+                "code":
+                    code.upper(),
+
+                "name":
+                    name
+
             })
+
 
     return found
 
+
+# ==================================================
+# EXPLANATION
+# ==================================================
 
 def ai_explanation(
     score,
@@ -71,9 +96,10 @@ def ai_explanation(
 ):
 
     message = (
-        f"HealthShield Score: "
+        f"IngreLens Score: "
         f"{score}/10.\n"
     )
+
 
     if warnings:
 
@@ -81,18 +107,20 @@ def ai_explanation(
             "\nPersonalized concerns:\n"
         )
 
+
         for warning in warnings:
 
             message += (
                 f"• {warning}\n"
             )
 
+
     if additives:
 
         message += (
-            "\nUltra-processed additives "
-            "detected:\n"
+            "\nDetected additives:\n"
         )
+
 
         for additive in additives:
 
@@ -101,6 +129,7 @@ def ai_explanation(
                 f"({additive['name']})\n"
             )
 
+
     if score >= 8:
 
         message += (
@@ -108,21 +137,28 @@ def ai_explanation(
             "for your health profile."
         )
 
+
     elif score >= 5:
 
         message += (
             "\nUse this product in moderation."
         )
 
+
     else:
 
         message += (
-            "\nThis product poses multiple "
+            "\nThis product has multiple "
             "concerns based on your health profile."
         )
 
+
     return message
 
+
+# ==================================================
+# GEMINI
+# ==================================================
 
 def generate_ai_reason(
     product,
@@ -135,12 +171,14 @@ def generate_ai_reason(
         "GEMINI_API_KEY"
     )
 
+
     if not api_key:
 
         return (
             "AI explanation is unavailable "
             "because GEMINI_API_KEY is not configured."
         )
+
 
     if genai is None:
 
@@ -149,17 +187,24 @@ def generate_ai_reason(
             "is not installed."
         )
 
+
     try:
 
         genai.configure(
             api_key=api_key
         )
 
-        model = genai.GenerativeModel(
-            "gemini-2.5-flash"
+
+        model = (
+            genai.GenerativeModel(
+                "gemini-2.5-flash"
+            )
         )
 
+
         prompt = f"""
+You are the AI assistant for IngreLens.
+
 Product:
 {product}
 
@@ -170,29 +215,37 @@ Lactose intolerance: {profile.lactose_intolerant}
 Gluten allergy: {profile.gluten_allergy}
 Nut allergy: {profile.nut_allergy}
 
-HealthShield score:
+IngreLens score:
 {score}/10
 
 Warnings:
 {warnings}
 
 Explain the result in simple language.
+
 Do not diagnose medical conditions.
-Focus on the ingredients and nutritional
-information provided.
+
+Focus only on the available product,
+ingredient and nutritional information.
 """
 
-        response = model.generate_content(
-            prompt
+
+        response = (
+            model.generate_content(
+                prompt
+            )
         )
+
 
         if response and response.text:
 
             return response.text
 
+
         return (
             "No AI explanation was generated."
         )
+
 
     except Exception:
 

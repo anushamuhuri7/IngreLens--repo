@@ -1,13 +1,17 @@
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import (
+    create_engine
+)
 
 from sqlalchemy.orm import (
     sessionmaker,
     declarative_base
 )
 
-from dotenv import load_dotenv
+from dotenv import (
+    load_dotenv
+)
 
 
 load_dotenv()
@@ -19,11 +23,10 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./healthshield.db"
+    "sqlite:///./ingrelens.db"
 )
 
 
-# Supabase/PostgreSQL compatibility
 if DATABASE_URL.startswith(
     "postgres://"
 ):
@@ -73,7 +76,7 @@ Base = declarative_base()
 
 
 # ==================================================
-# SUPABASE CLIENT
+# SUPABASE
 # ==================================================
 
 SUPABASE_URL = os.getenv(
@@ -97,14 +100,18 @@ if SUPABASE_URL and SUPABASE_KEY:
         )
 
         supabase_client = create_client(
+
             SUPABASE_URL,
+
             SUPABASE_KEY
+
         )
 
     except Exception as e:
 
         print(
-            f"Failed to initialize Supabase client: {e}"
+            "Failed to initialize "
+            f"Supabase client: {e}"
         )
 
 

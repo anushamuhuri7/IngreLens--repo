@@ -33,15 +33,23 @@ from app.services.nutrition import (
 )
 
 
+# ==================================================
+# ROUTER
+# ==================================================
+
 router = APIRouter(
     prefix="/food",
     tags=["Food Scanner"]
 )
 
 
-# Maximum image size:
-# 10 MB
-MAX_IMAGE_SIZE = 10 * 1024 * 1024
+# ==================================================
+# CONFIGURATION
+# ==================================================
+
+MAX_IMAGE_SIZE = (
+    10 * 1024 * 1024
+)
 
 
 ALLOWED_CONTENT_TYPES = {
@@ -52,12 +60,18 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 
+# ==================================================
+# FOOD SCANNER
+# ==================================================
+
 @router.post("/scan")
 async def scan_food(
 
     image: UploadFile = File(...),
 
-    db: Session = Depends(get_db),
+    db: Session = Depends(
+        get_db
+    ),
 
     current_user: models.User = Depends(
         get_current_user
@@ -66,17 +80,22 @@ async def scan_food(
 ):
 
     # ==================================================
-    # VALIDATE FILE TYPE
+    # FILE TYPE
     # ==================================================
 
-    if image.content_type not in ALLOWED_CONTENT_TYPES:
+    if image.content_type not in (
+        ALLOWED_CONTENT_TYPES
+    ):
 
         raise HTTPException(
+
             status_code=400,
+
             detail=(
                 "Unsupported image format. "
                 "Use JPEG, PNG or WEBP."
             )
+
         )
 
 
@@ -90,23 +109,29 @@ async def scan_food(
     if not contents:
 
         raise HTTPException(
+
             status_code=400,
+
             detail="Uploaded image is empty"
+
         )
 
 
     # ==================================================
-    # CHECK IMAGE SIZE
+    # IMAGE SIZE
     # ==================================================
 
     if len(contents) > MAX_IMAGE_SIZE:
 
         raise HTTPException(
+
             status_code=413,
+
             detail=(
                 "Image is too large. "
                 "Maximum allowed size is 10 MB."
             )
+
         )
 
 
@@ -122,8 +147,11 @@ async def scan_food(
     if frame is None:
 
         raise HTTPException(
+
             status_code=400,
+
             detail="Invalid image file"
+
         )
 
 
@@ -139,11 +167,13 @@ async def scan_food(
     try:
 
         # ==================================================
-        # QR / BARCODE DETECTION
+        # QR / BARCODE
         # ==================================================
 
-        detected_code = detect_food_code(
-            frame
+        detected_code = (
+            detect_food_code(
+                frame
+            )
         )
 
 
@@ -155,26 +185,29 @@ async def scan_food(
 
             try:
 
-                text = extract_text_from_image(
-                    frame
-                )
-
-            except Exception as e:
-
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        "OCR processing failed. "
-                        "Make sure EasyOCR is installed."
+                text = (
+                    extract_text_from_image(
+                        frame
                     )
                 )
 
+            except Exception:
 
-            # Detect additives directly from
-            # ingredient text
+                raise HTTPException(
 
-            additives = detect_additives(
-                text
+                    status_code=500,
+
+                    detail=(
+                        "OCR processing failed."
+                    )
+
+                )
+
+
+            additives = (
+                detect_additives(
+                    text
+                )
             )
 
 
@@ -184,29 +217,36 @@ async def scan_food(
 
                 "mode": "OCR",
 
-                "ingredients_text": text,
+                "ingredients_text":
+                    text,
 
-                "detected_additives": additives,
+                "detected_additives":
+                    additives,
 
                 "message": (
-                    "No barcode or QR code detected. "
-                    "OCR analysis completed."
+                    "No barcode or QR code "
+                    "detected. OCR analysis "
+                    "completed."
                 )
 
             }
 
 
         # ==================================================
-        # EXTRACT CODE
+        # CODE
         # ==================================================
 
-        barcode = detected_code["code"]
+        barcode = (
+            detected_code["code"]
+        )
 
-        scan_type = detected_code["type"]
+        scan_type = (
+            detected_code["type"]
+        )
 
 
         # ==================================================
-        # PRODUCT LOOKUP
+        # OPENFOODFACTS
         # ==================================================
 
         product = get_product(
@@ -225,9 +265,9 @@ async def scan_food(
                 "barcode": barcode,
 
                 "message": (
-                    "Barcode detected, but the "
-                    "product was not found in "
-                    "OpenFoodFacts."
+                    "Code detected, but the "
+                    "product was not found "
+                    "in OpenFoodFacts."
                 )
 
             }
@@ -256,11 +296,15 @@ async def scan_food(
         if not profile:
 
             raise HTTPException(
+
                 status_code=404,
+
                 detail=(
                     "Health profile not found. "
-                    "Please create your health profile first."
+                    "Please create your health "
+                    "profile first."
                 )
+
             )
 
 
@@ -281,20 +325,25 @@ async def scan_food(
         # ==================================================
 
         ingredients = (
+
             product.get(
                 "ingredients_text",
                 ""
             )
+
             or ""
+
         )
 
 
         # ==================================================
-        # ADDITIVE DETECTION
+        # ADDITIVES
         # ==================================================
 
-        additives = detect_additives(
-            ingredients
+        additives = (
+            detect_additives(
+                ingredients
+            )
         )
 
 
@@ -302,41 +351,49 @@ async def scan_food(
         # AI EXPLANATION
         # ==================================================
 
-        explanation = ai_explanation(
-            score,
-            warnings,
-            additives
+        explanation = (
+            ai_explanation(
+                score,
+                warnings,
+                additives
+            )
         )
 
 
         # ==================================================
-        # SAVE SCAN HISTORY
+        # SAVE HISTORY
         # ==================================================
 
         scan = models.ScanHistory(
 
-            user_id=current_user.id,
+            user_id=
+                current_user.id,
 
-            product_name=(
+            product_name=
                 product.get(
                     "product_name"
+                ),
+
+            safety_score=
+                score,
+
+            risk_message=
+                ", ".join(
+                    warnings
                 )
-            ),
-
-            safety_score=score,
-
-            risk_message=", ".join(
-                warnings
-            )
 
         )
 
 
-        db.add(scan)
+        db.add(
+            scan
+        )
 
         db.commit()
 
-        db.refresh(scan)
+        db.refresh(
+            scan
+        )
 
 
         # ==================================================
@@ -410,14 +467,17 @@ async def scan_food(
         raise
 
 
-    except Exception as e:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
+
             status_code=500,
+
             detail=(
-                "Food scan failed. "
+                "IngreLens food scan failed. "
                 "Please try again."
             )
+
         )

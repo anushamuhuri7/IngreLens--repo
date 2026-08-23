@@ -1,9 +1,7 @@
 from fastapi import FastAPI
-
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-
 from app import models
 
 from app.routers import (
@@ -24,15 +22,16 @@ Base.metadata.create_all(
 
 
 # ==================================================
-# FASTAPI
+# FASTAPI APPLICATION
 # ==================================================
 
 app = FastAPI(
-
-    title="HealthShield API",
-
-    version="1.0"
-
+    title="IngreLens API",
+    description=(
+        "AI-powered food ingredient and "
+        "health analysis API"
+    ),
+    version="1.0.0"
 )
 
 
@@ -62,15 +61,11 @@ app.include_router(
 # ==================================================
 
 app.add_middleware(
-
     CORSMiddleware,
 
     allow_origins=[
-
         "http://localhost:5173",
-
         "https://ingre-lens.vercel.app"
-
     ],
 
     allow_credentials=True,
@@ -78,18 +73,17 @@ app.add_middleware(
     allow_methods=["*"],
 
     allow_headers=["*"]
-
 )
 
 
 # ==================================================
-# ROOT
+# ROOT ENDPOINT
 # ==================================================
 
 @app.get("/")
 def root():
 
     return {
-        "message":
-            "HealthShield Backend Running"
+        "message": "IngreLens Backend Running",
+        "version": "1.0.0"
     }

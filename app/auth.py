@@ -16,7 +16,7 @@ load_dotenv()
 
 
 # ==================================================
-# JWT CONFIGURATION
+# JWT
 # ==================================================
 
 SECRET_KEY = os.getenv(
@@ -30,7 +30,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
 # ==================================================
-# PASSWORD HASHING
+# PASSWORD
 # ==================================================
 
 pwd_context = CryptContext(
@@ -63,7 +63,7 @@ def verify_password(
 
 
 # ==================================================
-# JWT TOKEN
+# ACCESS TOKEN
 # ==================================================
 
 def create_access_token(
@@ -83,6 +83,7 @@ def create_access_token(
     to_encode.update({
         "exp": expire
     })
+
 
     return jwt.encode(
 
