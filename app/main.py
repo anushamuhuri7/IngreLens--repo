@@ -22,7 +22,9 @@ DB_PATH = os.getenv("DATABASE_URL", "sqlite:///./ingrelens.db").replace("sqlite:
 SECRET = os.getenv("SECRET_KEY", "ingrelens-local-secret")
 
 app = FastAPI(title="IngreLens API", version="2.0.0")
-origins = [value.strip() for value in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if value.strip()]
+origins = [value.strip() for value in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if value.strip()]
+if os.getenv("APP_URL") and os.getenv("APP_URL") not in origins:
+    origins.append(os.getenv("APP_URL"))
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
