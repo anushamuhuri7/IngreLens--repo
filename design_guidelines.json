@@ -1,0 +1,35 @@
+{
+  "app_name": "IngreLens",
+  "app_type": "hybrid_fullstack",
+  "archetype": "ORGANIC & EARTHY",
+  "theme": "light",
+  "typography": {
+    "headings": {
+      "font_family": "Plus Jakarta Sans, sans-serif",
+      "weights": ["600", "700", "800"],
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "font_family": "Inter, sans-serif",
+      "weights": ["400", "500"]
+    }
+  },
+  "colors": {
+    "primary": "#10B981",
+    "primary_dark": "#059669",
+    "accent": "#F59E0B",
+    "background": "#F8FAFC",
+    "card_bg": "#FFFFFF",
+    "text_main": "#0F172A",
+    "text_muted": "#64748B",
+    "border": "#E2E8F0"
+  },
+  "visual_enhancers": {
+    "border_radius": "rounded-xl",
+    "shadows": "shadow-sm hover:shadow-md transition-shadow",
+    "glassmorphism": "backdrop-blur-xl bg-white/80 border border-slate-200/60"
+  },
+  "component_path": "/app/src/App.jsx",
+  "instructions_to_main_agent": "Ensure all interactive elements have data-testid. Support live camera preview, capture, crop, retake, OCR results, food & medication label detection, personalized AI comparison with GPT 5.6 Terra / Claude Sonnet 5, rating giver, scan history, user authentication, and profile settings.",
+  "image_urls": []
+}
