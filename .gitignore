@@ -6,6 +6,9 @@ dist/
 .env
 .env.local
 .env.*.local
+# Deployment requires these env files to be committed
+!frontend/.env
+!backend/.env
 
 # Python / Backend
 venv/

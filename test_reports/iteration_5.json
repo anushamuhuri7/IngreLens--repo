@@ -1,0 +1,36 @@
+{
+  "summary": "Backend-only verification of the .gitignore deployment-config fix plus full backend regression. Confirmed via `git check-ignore` that /app/frontend/.env and /app/backend/.env are NO LONGER ignored (matched by negation rules .gitignore:10-11) while the generic patterns `.env` and `.env.*.local` remain active for other paths (some-other/.env, frontend/.env.local still ignored). `git status --porcelain` lists both files as untracked (??) rather than ignored, so the deploy build context will include them. Verified env keys: frontend REACT_APP_BACKEND_URL (https preview URL); backend MONGO_URL, DB_NAME, SECRET_KEY, EMERGENT_LLM_KEY, CORS_ORIGINS all present/non-empty. Regression: 52/52 backend tests pass (new iter5 gitignore/env suite 10, iter4 deploy regression 7, backend_test.py + test_new_features.py 35) — health healthy, seeded QA login (ingretest@ingrelens.dev), register+login, GET /api/profile avatar present, partial-PUT preserves avatar, GET /api/barcode/3017620422003?mode=FOOD returns Nutella, scan-by-barcode returns real analysis. No redeploy attempted, as instructed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (app/main.py:51-55)", "issue": "CORS_ORIGINS=* is expanded to allow_origins=['*'] together with allow_credentials=True. Browsers reject credentialed requests against a wildcard ACAO. Harmless today (auth uses Authorization bearer header, not cookies), but should be set to explicit origins before production."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter5_gitignore_envfiles.py",
+    "/app/backend/tests/test_iter4_deploy_regression.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/iter5_results.xml",
+    "/app/test_reports/pytest/iter5_full.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Password hashing uses bcrypt.hashpw/gensalt directly (app/auth.py, app/main.py) which yields $2b$ hashes and enforces the 72-byte limit in verify — correct.",
+    "No login brute-force lockout / failed-attempt throttling exists on the auth endpoints; auth is bearer-token based with no httpOnly cookie session. These playbook items are not implemented — informational only, not part of this fix.",
+    "Tighten CORS_ORIGINS to explicit origins instead of '*' since allow_credentials=True is set."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter5_gitignore_envfiles.py"],
+  "success_rate": {"backend": "100% (52/52)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Transient TEST_<uuid>@ingrelens.test users created by register/login tests; existing seeded QA account reused.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (valid, login verified)",
+  "context_for_next_testing_agent": "Backend app lives at /app/app (uvicorn app.main:app on 8001), not /app/backend/server.py; only tests live under /app/backend/tests. Env files are at /app/frontend/.env and /app/backend/.env and are intentionally untracked-but-not-ignored via .gitignore negations (!frontend/.env, !backend/.env) — do not remove those lines. Regression suites: test_iter5_gitignore_envfiles.py (config), test_iter4_deploy_regression.py, backend_test.py, test_new_features.py. Open minor item: CORS wildcard + allow_credentials.",
+  "rca_of_the_issue": "Original deploy failure (`read env file frontend/.env: no such file or directory`) was caused by the bare `.env` pattern in /app/.gitignore excluding the two required env files from the deployer's build context. The added negation rules `!frontend/.env` and `!backend/.env` (lines 10-11) re-include exactly those paths; verified with `git check-ignore -v` returning the negation rules for both files and the generic rule still matching other .env paths. No application code changed and no regressions observed."
+}
