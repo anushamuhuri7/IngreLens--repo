@@ -1,0 +1,32 @@
+{
+  "summary": "Verified the Vercel/build-config fixes (submodule removal, package-lock deletion, yarn-based vercel.json, vite manualChunks) and ran the full backend regression suite. All 5 config assertions PASS and the vite build produces 4 JS chunks all under 500KB with rc=0. Backend suite: 142/147 passed. The 5 failures are NOT caused by the build-config change itself but by a real regression in /app/.gitignore: an appended block containing `*.env` (line 33) now overrides the earlier `!frontend/.env` / `!backend/.env` negations, so both deployment-critical env files are git-ignored again (the exact bug fixed in iteration 5/8). Live smoke on the preview URL is healthy and seeded QA login works.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/app/.gitignore (deployment build context)", "issue": "The appended block `.vercel / .env.* / *.env / ...` sits AFTER `!frontend/.env` and `!backend/.env`; `git check-ignore -v frontend/.env` => `.gitignore:33:*.env`. Both frontend/.env and backend/.env are git-ignored again, which previously caused the Emergent deploy BUILD failure `read env file frontend/.env: no such file or directory`. Fix: move the `!frontend/.env` / `!backend/.env` negations BELOW the `*.env` / `.env.*` patterns (or drop the duplicate `*.env` line). Causes 5 test failures: test_iter5_gitignore_envfiles.py (3) and test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored (2).", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "Response carries `access-control-allow-origin: *` (edge/ingress layer) rather than explicit origins; harmless today because auth uses a bearer token (no auth cookie is set), but note the playbook's 'credentials with explicit origins' item does not apply to this token-based design."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/pytest/pytest_iter9_full.xml",
+    "/app/test_reports/pytest/iter9_full.log",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "action_items": [
+    "Reorder /app/.gitignore so `!frontend/.env` and `!backend/.env` come after the `*.env` / `.env.*` patterns; re-verify with `git check-ignore -v frontend/.env backend/.env` (must return rc=1) — this restores 147/147."
+  ],
+  "critical_code_review_comments": [
+    "vercel.json / vite.config.js changes are correct and minimal: yarn install --frozen-lockfile + yarn build, chunkSizeWarningLimit=1500, manualChunks (react-vendor/zxing/icons). Build emits index 32.9KB, icons 17.4KB, react-vendor 133.9KB, zxing 453.4KB — all < 500KB, so the >500KB warning is genuinely eliminated (not just suppressed).",
+    "zxing chunk is 453KB and close to the 500KB threshold; consider lazy-importing the scanner route so it is not in the initial critical path."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "96.6% (142/147)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None; reused seeded QA account ingretest@ingrelens.dev",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (login verified, 200 with bearer token)",
+  "context_for_next_testing_agent": "Config verification results: `git ls-files --stage | grep '^160000'` returns nothing; `git submodule status` rc=0 with no output; /app/package-lock.json absent, /app/yarn.lock present; /app/ingrelens absent; vercel.json contains only yarn commands (no npm); vite.config.js has chunkSizeWarningLimit=1500 + manualChunks(react-vendor, zxing, icons). `yarn build` rc=0, 4 JS chunks all <500KB. bcrypt hash for QA user starts with $2b$12$. Brute-force lockout test (429) passes. Only outstanding issue is the .gitignore `*.env` ordering regression.",
+  "rca_of_the_issue": "A block of patterns (.vercel, .env.*, *.env, credentials.json, *.pem, *.key, .credentials) was appended to the end of /app/.gitignore. In gitignore semantics the last matching pattern wins, so `*.env` at line 33 re-ignores frontend/.env and backend/.env despite the earlier negations at lines 10-11. Reproduce: `cd /app && git check-ignore -v frontend/.env` -> `.gitignore:33:*.env  frontend/.env` (rc=0, meaning ignored). Mitigation: place the two negation lines after the appended block."
+}

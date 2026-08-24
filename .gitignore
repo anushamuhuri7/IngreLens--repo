@@ -29,3 +29,14 @@ supabase/.temp/
 Thumbs.db
 
 .vercel
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
+
+# Deployment requires these env files to be committed — must come LAST
+# so they override every generic .env / *.env / .env.* pattern above.
+!frontend/.env
+!backend/.env

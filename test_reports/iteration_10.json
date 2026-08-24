@@ -1,0 +1,39 @@
+{
+  "summary": "Config-only follow-up verification (iteration 10). Verified .gitignore reordering, full backend regression suite (147/147 pass), Vercel deploy fixes still intact, yarn build chunk sizes, live /api/health + seeded QA login, and bcrypt hash format. No application code was modified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (app/main.py:50-58)", "issue": "CORS_ORIGINS defaults to '*' while allow_credentials=True — invalid per CORS spec; browsers reject credentialed wildcard requests. Works today only because the app uses Bearer tokens (no cookies)."},
+      {"endpoint": "/api/auth/login", "issue": "No brute-force lockout / rate limiting on failed login attempts."},
+      {"endpoint": "make_token (app/main.py:66)", "issue": "Token is base64(user_id:hmac) with no expiry/nonce; the 'Your session has expired' 401 message is misleading since tokens never expire and cannot be revoked."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_iter4_deploy_regression.py",
+    "/app/backend/tests/test_iter5_gitignore_envfiles.py",
+    "/app/backend/tests/test_iter6_requirements.py",
+    "/app/backend/tests/test_iter7_pins_and_shim.py",
+    "/app/backend/tests/test_iter8_deploy_smoke.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Set CORS_ORIGINS to explicit origins (or set allow_credentials=False) so the wildcard+credentials combination is not shipped to production.",
+    "Consider adding token expiry (exp claim / JWT) and login rate limiting before public launch — currently signed tokens are valid forever."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None created; used existing seeded QA account ingretest@ingrelens.dev",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (login verified, HTTP 200, token returned, bcrypt hash $2b$12$)",
+  "context_for_next_testing_agent": "Iteration 10 verified: git check-ignore --no-index frontend/.env -> rc=1, backend/.env -> rc=1, foo/bar.env -> rc=0 (still ignored). No .gitmodules present, /app/package-lock.json absent, vercel.json uses yarn only (buildCommand 'yarn build', installCommand 'yarn install --frozen-lockfile'), vite.config.js has chunkSizeWarningLimit=1500 + manualChunks (react-vendor, zxing, icons). yarn build -> 4 JS chunks: icons 17.4KB, index 32.9KB, react-vendor 133.9KB, zxing 453.4KB (all <500KB), 0 warnings. Full suite: 147 passed in 147s (run in background; takes ~2.5 min). GET /api/health -> 200 {status: healthy, db: ingrelens}. Remaining open (non-blocking) items are the CORS wildcard+credentials, no token expiry, and no login rate limiting.",
+  "rca_of_the_issue": "Iteration 9's 5 failures were caused by gitignore last-match-wins semantics: an appended block with `*.env`/`.env.*` came after the `!frontend/.env` / `!backend/.env` negations, re-ignoring both env files. Moving the negations to the end of /app/.gitignore (lines 41-42) resolves it; verified via git check-ignore and the previously-failing tests in test_iter5_gitignore_envfiles.py and test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored now pass."
+}
