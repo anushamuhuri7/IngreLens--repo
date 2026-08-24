@@ -1,109 +1,50 @@
 import sqlite3
 import os
-from sqlalchemy import create_engine
-from app.database import Base, engine, DATABASE_URL
-from app.models import User, HealthProfile, ScanHistory, MedicineScan
+from supabase import create_client, Client
+from dotenv import load_dotenv
 
-def sync_sqlite_to_supabase():
-    sqlite_db_path = "healthshield.db"
-    if not os.path.exists(sqlite_db_path):
-        print(f"SQLite database '{sqlite_db_path}' not found.")
+load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SQLITE_DB = "healthshield.db"
+
+def migrate():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("❌ Supabase URL or Key missing in .env file.")
         return
 
-    print("Creating tables in target database...")
-    Base.metadata.create_all(bind=engine)
-
-    if DATABASE_URL.startswith("sqlite"):
-        print("Target is local SQLite. Set DATABASE_URL in .env to point to your Supabase PostgreSQL instance.")
+    if not os.path.exists(SQLITE_DB):
+        print(f"ℹ️ No local SQLite database ({SQLITE_DB}) found to migrate.")
         return
 
-    print("Connecting to local SQLite database to read existing data...")
-    conn = sqlite3.connect(sqlite_db_path)
-    conn.row_factory = sqlite3.Row
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    conn = sqlite3.connect(SQLITE_DB)
     cursor = conn.cursor()
 
-    from app.database import SessionLocal
-    db = SessionLocal()
-
     try:
-        # Sync Users
-        cursor.execute("SELECT * FROM users")
-        users = cursor.fetchall()
-        for u in users:
-            existing = db.query(User).filter(User.id == u['id']).first()
-            if not existing:
-                user = User(
-                    id=u['id'],
-                    name=u['name'],
-                    email=u['email'],
-                    password=u['password']
-                )
-                db.add(user)
-        db.commit()
-        print(f"Synced {len(users)} users.")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [t[0] for t in cursor.fetchall()]
+        print(f"Found SQLite tables: {tables}")
 
-        # Sync HealthProfiles
-        cursor.execute("SELECT * FROM health_profiles")
-        profiles = cursor.fetchall()
-        for p in profiles:
-            existing = db.query(HealthProfile).filter(HealthProfile.id == p['id']).first()
-            if not existing:
-                prof = HealthProfile(
-                    id=p['id'],
-                    user_id=p['user_id'],
-                    diabetes=bool(p['diabetes']),
-                    hypertension=bool(p['hypertension']),
-                    lactose_intolerant=bool(p['lactose_intolerant']),
-                    gluten_allergy=bool(p['gluten_allergy']),
-                    nut_allergy=bool(p['nut_allergy'])
-                )
-                db.add(prof)
-        db.commit()
-        print(f"Synced {len(profiles)} health profiles.")
-
-        # Sync ScanHistory
-        cursor.execute("SELECT * FROM scan_history")
-        scans = cursor.fetchall()
-        for s in scans:
-            existing = db.query(ScanHistory).filter(ScanHistory.id == s['id']).first()
-            if not existing:
-                scan = ScanHistory(
-                    id=s['id'],
-                    user_id=s['user_id'],
-                    product_name=s['product_name'],
-                    safety_score=s['safety_score'],
-                    risk_message=s['risk_message']
-                )
-                db.add(scan)
-        db.commit()
-        print(f"Synced {len(scans)} scan history items.")
-
-        # Sync MedicineScans
-        cursor.execute("SELECT * FROM medicine_scans")
-        med_scans = cursor.fetchall()
-        for m in med_scans:
-            existing = db.query(MedicineScan).filter(MedicineScan.id == m['id']).first()
-            if not existing:
-                med_scan = MedicineScan(
-                    id=m['id'],
-                    user_id=m['user_id'],
-                    medicine_name=m['medicine_name'],
-                    batch_number=m['batch_number'],
-                    qr_verified=bool(m['qr_verified']),
-                    packaging_score=m['packaging_score']
-                )
-                db.add(med_scan)
-        db.commit()
-        print(f"Synced {len(med_scans)} medicine scan items.")
-
-        print("Data migration to Supabase completed successfully!")
-
+        if "scans" in tables or "scanned_products" in tables:
+            tbl = "scanned_products" if "scanned_products" in tables else "scans"
+            cursor.execute(f"SELECT product_name, raw_ingredients, safety_score, overall_verdict FROM {tbl}")
+            rows = cursor.fetchall()
+            for row in rows:
+                data = {
+                    "product_name": row[0],
+                    "raw_ingredients": row[1],
+                    "safety_score": row[2],
+                    "overall_verdict": row[3],
+                    "analysis_json": {}
+                }
+                supabase.table("scanned_products").insert(data).execute()
+            print(f"✅ Successfully migrated {len(rows)} scans to Supabase.")
     except Exception as e:
-        db.rollback()
-        print(f"Error during migration: {e}")
+        print(f"Migration error: {e}")
     finally:
-        db.close()
         conn.close()
 
 if __name__ == "__main__":
-    sync_sqlite_to_supabase()
+    migrate()

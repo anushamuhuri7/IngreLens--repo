@@ -1,37 +1,43 @@
--- Run this SQL in your Supabase SQL Editor (https://supabase.com/dashboard/project/lvdgyqsmnooweyqamyhr/sql/new)
+-- Enable UUID extension
+create extension if not exists "uuid-ossp";
 
-CREATE TABLE IF NOT EXISTS public.users (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL
+-- 1. Profiles Table
+create table if not exists public.profiles (
+  id uuid references auth.users on delete cascade primary key,
+  email text unique,
+  allergies text[] default '{}',
+  dietary_flags text[] default '{}',
+  skin_type text default 'Normal',
+  is_pregnant boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
-CREATE TABLE IF NOT EXISTS public.health_profiles (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES public.users(id) ON DELETE CASCADE,
-    diabetes BOOLEAN DEFAULT FALSE,
-    hypertension BOOLEAN DEFAULT FALSE,
-    lactose_intolerant BOOLEAN DEFAULT FALSE,
-    gluten_allergy BOOLEAN DEFAULT FALSE,
-    nut_allergy BOOLEAN DEFAULT FALSE
+-- 2. Scanned Products History
+create table if not exists public.scanned_products (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references public.profiles(id) on delete set null,
+  product_name text not null,
+  raw_ingredients text not null,
+  safety_score int not null,
+  overall_verdict text not null,
+  flagged_count int default 0,
+  analysis_json jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
-CREATE TABLE IF NOT EXISTS public.scan_history (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES public.users(id) ON DELETE CASCADE,
-    product_name TEXT,
-    safety_score FLOAT,
-    risk_message TEXT,
-    scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Enable Row Level Security (RLS)
+alter table public.profiles enable row level security;
+alter table public.scanned_products enable row level security;
 
-CREATE TABLE IF NOT EXISTS public.medicine_scans (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES public.users(id) ON DELETE CASCADE,
-    medicine_name TEXT,
-    batch_number TEXT,
-    qr_verified BOOLEAN,
-    packaging_score FLOAT,
-    scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- RLS Policies
+create policy "Users can view and edit own profile"
+  on public.profiles for all
+  using (auth.uid() = id);
+
+create policy "Users can view and insert own scans"
+  on public.scanned_products for all
+  using (auth.uid() = user_id or user_id is null);
+
+-- Indexing for fast search
+create index if not exists idx_scanned_products_user on public.scanned_products(user_id);
+create index if not exists idx_scanned_products_created on public.scanned_products(created_at desc);
