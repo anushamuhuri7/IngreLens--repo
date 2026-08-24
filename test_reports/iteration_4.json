@@ -1,0 +1,52 @@
+{
+  "summary": "Backend-only regression verification after the deployment-config fix (creation of /app/frontend/.env). Confirmed the env file exists with the preview REACT_APP_BACKEND_URL, and re-ran the full existing suites plus a new focused deploy-regression suite. Results: 22/22 existing regression, 13/13 new-features (both previously-failing tests were test-harness issues and are now fixed), 7/7 new iteration-4 checks => 42/42 backend tests pass. No runtime regressions introduced. Also confirmed the two iteration-3 action items were fixed by the main agent: partial PUT /api/profile now merges (avatar preserved) and barcode-only scan with an unknown code now returns an explicit 404 'couldn't find barcode ... in the open catalog' instead of the generic 400.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "CORS middleware (app/main.py:50-57)",
+        "issue": "CORS_ORIGINS='*' combined with allow_credentials=True. Verified preflight returns access-control-allow-origin: *, which browsers reject for credentialed (cookie) requests. Harmless today because auth uses a Bearer token header, but should be an explicit origin list per the auth playbook if cookie auth is ever added."
+      },
+      {
+        "endpoint": "Auth scheme",
+        "issue": "Playbook httpOnly-cookie check is not applicable: this app returns a JWT in the JSON body (key 'token') and sets no cookies. bcrypt hash format ($2b$) and brute-force lockout (429 after 5 failures) were both re-verified as passing."
+      },
+      {
+        "endpoint": "GET /api/barcode/{code} (MEDICINE)",
+        "issue": "Pre-existing (iteration 3) limitation, unchanged: _normalise_ndc still fails for 10/11-digit package NDCs and GTIN-12/13 drug barcodes. Not a regression."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_deploy_regression.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/iter4_regression.xml",
+    "/app/test_reports/pytest/iter4_new_features.xml",
+    "/app/test_reports/pytest/iter4_deploy.xml"
+  ],
+  "action_items": [
+    "Optional: set CORS_ORIGINS to the explicit preview/production origins instead of '*' (allow_credentials=True + '*' is an invalid combination for credentialed browser requests).",
+    "Optional (carried over): improve _normalise_ndc for 10/11-digit package NDCs and GTIN drug barcodes."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/.env now exists and only contains REACT_APP_BACKEND_URL — correct; test harnesses now resolve BASE_URL from it (the hardcoded fallback in the older suites is now dead code and can be removed).",
+    "src/App.jsx (636 lines) still exceeds the 700-line-ish modularity guideline for a single component tree; consider splitting into feature modules."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_iter4_deploy_regression.py"
+  ],
+  "success_rate": {"backend": "100% (42/42)", "frontend": "not tested (not requested)"},
+  "seed_data_creation": "One throwaway TEST_<uuid>@ingrelens.test user per run of test_iter4_deploy_regression.py (register/login check, not auto-purged). Existing suites purge their own TEST_ users. Seeded QA account ingretest@ingrelens.dev used for profile/barcode/scan checks; its 'goals' field is set to ['low sugar'] by the partial-PUT merge test and its avatar is left untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (login verified 200; token JSON key is 'token', not 'access_token')",
+  "context_for_next_testing_agent": "Iteration 4 verified: frontend/.env present with preview REACT_APP_BACKEND_URL; GET /api/health healthy; fresh register+login+/api/auth/me OK; seeded QA login OK; GET /api/profile returns avatar data-URL and no _id; partial PUT /api/profile merges (avatar preserved, goals updated) — the iteration-3 avatar-wipe bug is FIXED; GET /api/barcode/3017620422003?mode=FOOD -> Nutella/openfoodfacts; POST /api/scan with barcode only -> real Claude analysis (total_ingredients>0, no fallback text) in ~25s. Two test-side fixes I applied: (1) test_new_features.py now inserts '/app' into sys.path so 'from app.ocr_engine import ...' works (pytest rootdir is /app/backend); (2) test_scan_with_unknown_barcode_and_no_text_400 now accepts 400 or 404 since the backend improved the error to a 404 with an explicit barcode message. Auth token JSON key is 'token'. LLM scan calls need >=120s timeouts.",
+  "rca_of_the_issue": "The two failures seen on first re-run were harness defects, not app regressions: ModuleNotFoundError 'app' because pytest rootdir /app/backend is not the package root, and a stale 400 expectation for the barcode-not-found path that the main agent intentionally changed to 404. Both fixed in test code; no application code was modified."
+}

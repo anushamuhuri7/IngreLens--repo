@@ -4,8 +4,14 @@ from __future__ import annotations
 import io
 import os
 import re
+import sys
 import uuid
 from pathlib import Path
+
+# The FastAPI app package lives at /app/app; pytest rootdir is /app/backend so
+# make the repo root importable for the direct-OCR unit test.
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
 
 import pytest
 import requests
@@ -172,7 +178,10 @@ class TestBarcode:
         r = api_client.post(
             f"{API}/scan", data={"barcode": UNKNOWN_BARCODE}, headers=temp_headers, timeout=60
         )
-        assert r.status_code == 400, r.text[:300]
+        # Iteration 4: backend now answers 404 with an explicit barcode-not-found
+        # message (previously a generic 400) — both are acceptable client errors.
+        assert r.status_code in (400, 404), r.text[:300]
+        assert UNKNOWN_BARCODE in r.json()["detail"] or "barcode" in r.json()["detail"].lower()
 
     def test_scan_via_barcode_only(self, api_client, temp_headers):
         r = api_client.post(
