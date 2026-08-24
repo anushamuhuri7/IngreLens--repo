@@ -1,29 +1,35 @@
 # IngreLens Product Requirements
 
 ## Original problem statement
-Use the github repository and the video(for front-end), complete camera and OCR integration, ai comparison with profile, and finish the food/med label scanner and rating giver app IngreLens, completely.
+Use the github repository and the video (for front-end), complete camera and OCR integration, ai comparison with profile, and finish the food/med label scanner and rating giver app IngreLens, completely.
 
-## Architecture decisions
-- React/Vite frontend with a mobile-first app shell matching the supplied recording.
-- FastAPI backend with SQLite persistence for accounts, profiles, and scan history in this repository.
-- Browser camera capture with image upload and server-side Tesseract OCR fallback.
-- Signed bearer sessions keep each user’s scans and health profile private to their account.
+## Architecture
+- **Frontend**: React 18 + Vite + Tailwind, mobile-first shell matching the supplied recording.
+- **Backend**: FastAPI + Motor (async MongoDB) on 0.0.0.0:8001; ingress proxies `/api/*`.
+- **Persistence**: MongoDB (`MONGO_URL`, `DB_NAME=ingrelens`) with collections `users`, `profiles`, `scans`, `login_attempts`.
+- **AI**: Claude Sonnet 5 via `emergentintegrations` (Emergent Universal Key) for personalised label analysis.
+- **OCR**: Pytesseract server-side + browser camera capture with interactive crop.
 
 ## User personas
 - Health-conscious shoppers checking food ingredients and nutrition concerns.
-- People checking medication directions, warnings, and expiry/safety reminders.
+- People verifying medication directions, warnings, dosage and interactions.
 
 ## Core requirements
-- Account registration and login with backend-stored password hashes.
-- Food and medicine scan modes, live camera, upload, paste text, OCR, personalized comparison, rating, history, and profile editing.
+- Register/login with backend-stored bcrypt password hashes; per-user bearer sessions.
+- Editable health profile (goals, allergies, conditions, medicines, age).
+- Live camera capture, upload, interactive corner-drag crop, paste-text fallback, server OCR.
+- AI-driven per-ingredient breakdown, safety score, verdict, personalised recommendations and (for MEDICINE) safety notice.
+- Persistent scan history per user with search + delete.
 
-## Implemented (2026-08-24)
-- Rebuilt the recording-inspired authentication, dashboard, scanner, results, history, and profile flows.
-- Added camera capture, upload fallback, OCR processing, profile matching, safety scoring, medicine disclaimer, and persistent user-owned records.
-- Added unique test IDs for user-facing controls and states.
+## Implemented (2026-02)
+- Full SQLite → MongoDB migration; single source of truth in `/app/backend/.env`.
+- Claude Sonnet 5 integration (`app/ai_analyzer.py`) returning strict JSON reports.
+- Interactive image crop overlay before analysis (`CropEditor` in `App.jsx`).
+- Personalised "Recommendations" section rendered on the Results page.
+- Seeded test account documented in `/app/memory/test_credentials.md`.
 
 ## Prioritized backlog
-- P0: Connect a production-grade medical/food knowledge model for richer label interpretation.
-- P1: Add crop/retake editing controls after camera capture.
-- P1: Add barcode lookup and structured nutrition facts extraction.
-- P2: Add export/shareable scan reports and health-news management.
+- P1: Barcode lookup + branded product enrichment (OpenFoodFacts / DailyMed).
+- P1: Streaming AI response so results feel instant.
+- P2: Shareable PDF report of a scan.
+- P2: Push/email reminders when a stored scan matches a newly-added allergy.

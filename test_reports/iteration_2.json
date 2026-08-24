@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only regression of the SQLite->MongoDB + Claude Sonnet 5 migration against the external ingress URL. 22 pytest cases across health, auth (register/login/me/brute-force lockout/bcrypt hash), profile defaults+persistence, scan (FOOD, MEDICINE, personalisation, validation, invalid mode), history ordering, clear-history and cross-user isolation. All 22 passed. Real Claude Sonnet 5 responses verified (no fallback text); personalisation confirmed with an A/B run on the same label: no profile -> 6.5 / 'Moderate Risk' / profile_match [], with profile (peanut allergy, hypertension, lisinopril, weight loss) -> 2.5 / 'Avoid' / profile_match ['peanut allergy','hypertension','lisinopril'], 4/6 ingredients flagged and tailored recommendations. No 5xx in backend logs during the run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/register", "issue": "Email is a plain str (not EmailStr) - 'notanemail' registers successfully with HTTP 200. Add format validation."},
+      {"endpoint": "POST /api/auth/register", "issue": "No unique index on users.email; duplicate detection is a read-then-insert, so concurrent registrations can create two accounts with the same email. Add a unique index on users.email at startup."},
+      {"endpoint": "Bearer tokens (all protected routes)", "issue": "Token = base64(user_id + HMAC(user_id)) with no expiry/issued-at and no revocation, yet 401s say 'Your session has expired'. A leaked token is valid forever; message is misleading."},
+      {"endpoint": "CORS", "issue": "CORS_ORIGINS=* with allow_credentials=True is an invalid combination per the fetch spec; browsers reject credentialed requests against a wildcard origin. Set explicit origins."},
+      {"endpoint": "login_attempts collection", "issue": "No TTL index on the lockout documents; expired records are never reaped (currently they are deleted on successful login only)."},
+      {"endpoint": "GET /api/history", "issue": "Hardcoded limit(200) with no pagination params; older scans silently become unreachable."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/adhoc_personalisation_check.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Validate email format on register/login (pydantic EmailStr) - invalid emails currently create accounts.",
+    "Create a unique index on users.email to close the duplicate-registration race.",
+    "Add expiry (exp claim / JWT) to the bearer token and align the 401 message with the actual failure.",
+    "Replace CORS_ORIGINS=* with explicit origins since allow_credentials=True is enabled.",
+    "Optional: TTL index on login_attempts and pagination for /api/history."
+  ],
+  "critical_code_review_comments": [
+    "app/main.py: token payload contains only user_id + HMAC, no timestamp -> non-expiring, non-revocable credential.",
+    "app/main.py login(): on the 5th failure the counter is reset to 0 while `until` is set; after the 15-min window the next wrong password restarts from 1 (acceptable, but no persistent record of repeated abuse).",
+    "app/main.py: duplicate-email check is not atomic and no DB index enforces uniqueness.",
+    "app/ai_analyzer.py: fallback path returns HTTP 200 with safety_score 0 / verdict 'Avoid'; the client cannot distinguish an AI outage from a genuinely unsafe product - consider an explicit `ai_status` field.",
+    "src/lib/api.js reads import.meta.env.REACT_APP_BACKEND_URL first (good) but .env.example still only documents VITE_API_URL."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/backend/tests/adhoc_personalisation_check.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Seeded QA account ingretest@ingrelens.dev verified via login. All other accounts were random TEST_*@ingrelens.test users; their users/profiles/scans/login_attempts were purged from MongoDB after the run (verified counts).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (from /app/memory/test_credentials.md) - login works.",
+  "context_for_next_testing_agent": "Run `python -m pytest /app/backend/tests/backend_test.py -v` (approx 45s; three live Claude Sonnet 5 calls). Ordering matters inside TestProfile->TestScan->TestHistory (session-scoped `scan_user` fixture), so do not shuffle or run with -n. Frontend/UI was NOT tested in this iteration. Brute-force lockout is per-email and lasts 900s, so always use a fresh random email for login-failure tests. bcrypt hashes verified as $2b$. No httpOnly cookie flow exists - auth is Bearer-token only, so the cookie/seed_admin playbook checks are N/A for this app.",
+  "rca_of_the_issue": "No functional defects found. Only my initial test assertion failed because the API lowercases emails on register (expected behaviour); the assertion was corrected. Remaining items are hardening gaps (email validation, unique index, token expiry, CORS wildcard + credentials) rather than broken behaviour."
+}
