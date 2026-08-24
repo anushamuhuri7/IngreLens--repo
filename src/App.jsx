@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Aperture, ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, Clock3, Crop, ExternalLink, FileImage, History as HistoryIcon, Home, ImagePlus, LogOut, Plus, RotateCcw, ScanBarcode, ShieldCheck, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-react';
 import BarcodeScanner from './components/BarcodeScanner';
 import { auth, request, submitScan } from './lib/api';
+import { extractTextFromImage } from './lib/ocr';
 
 const initialProfile = { goals: ['Low sodium'], allergies: [], conditions: [], medicines: [], age: '', avatar: '' };
 const tagGroups = [
@@ -133,7 +134,9 @@ function NewsCarousel() {
             rel="noopener noreferrer"
             data-testid={`news-slide-${i}`}
           >
-            <div className="news-photo" style={{ backgroundImage: `url(${article.photo})` }} />
+            <div className="news-photo" style={{ backgroundImage: `url(${article.photo})` }}>
+              <img src={article.photo} alt="" hidden onError={e => { e.target.parentElement.style.backgroundImage = 'linear-gradient(135deg, #10402f, #1d6b46)'; }} />
+            </div>
             <div className="news-body">
               <span className="kicker">{article.kicker}</span>
               <h3>{article.title}</h3>
@@ -331,8 +334,23 @@ function ScanPage({ mode, go, onResult }) {
     if (!file && !text.trim() && !barcode) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      onResult(await submitScan({ file, text, productName: name || (mode === 'FOOD' ? 'Food label' : 'Medicine label'), mode, barcode }));
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
+      let captured = text.trim();
+      if (file) {
+        setNotice('Reading label text in your browser…');
+        const ocrText = await extractTextFromImage(file, p => setNotice(`Reading label text… ${p}%`));
+        if (ocrText) {
+          captured = captured ? `${captured}\n${ocrText}` : ocrText;
+          setText(captured);
+        } else if (!captured && !barcode) {
+          setError("We couldn't read any text in this photo. Try a sharper, closer shot or paste the label text below.");
+          setNotice(''); setBusy(false);
+          return;
+        }
+      }
+      setNotice('Analyzing with AI…');
+      onResult(await submitScan({ text: captured, productName: name || (mode === 'FOOD' ? 'Food label' : 'Medicine label'), mode, barcode }));
+      setNotice('');
+    } catch (err) { setError(err.message); setNotice(''); } finally { setBusy(false); }
   }
 
   if (scanningBarcode) {
@@ -619,10 +637,16 @@ export default function App() {
       .then(([u, p, h]) => { setUser(u); setProfile({ ...initialProfile, ...(p || {}) }); setHistory(h || []); })
       .catch(() => localStorage.removeItem('ingrelens_token'));
   }, []);
+  function onAuthed(u) {
+    setUser(u);
+    Promise.all([request('/api/profile'), request('/api/history')])
+      .then(([p, h]) => { setProfile({ ...initialProfile, ...(p || {}) }); setHistory(h || []); })
+      .catch(() => {});
+  }
   function go(next, data) { if (data) setResult(data); setPage(next); }
   function startScan(next) { setMode(next); setPage('scan'); }
   function logout() { localStorage.removeItem('ingrelens_token'); setUser(null); }
-  if (!user) return <Auth onDone={setUser} />;
+  if (!user) return <Auth onDone={onAuthed} />;
   return (
     <div className="app-shell">
       {page === 'home' && <HomePage user={user} go={go} startScan={startScan} profile={profile} />}

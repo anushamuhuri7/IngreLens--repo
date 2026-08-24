@@ -1,6 +1,7 @@
 # Node / Frontend
 node_modules/
 dist/
+package-lock.json
 
 # Environment
 .env
@@ -29,6 +30,7 @@ supabase/.temp/
 Thumbs.db
 
 .vercel
+memory/secrets.local.md
 .env.*
 *.env
 credentials.json

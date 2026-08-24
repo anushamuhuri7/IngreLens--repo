@@ -20,3 +20,10 @@ All protected endpoints require the bearer token returned by register/login:
 - `GET /api/history` · `DELETE /api/history`
 
 Backend base URL: read from `frontend/.env` → `REACT_APP_BACKEND_URL` (falls back to same-origin, ingress proxies `/api` to backend on port 8001).
+
+## Vercel deployment credentials (2026-06)
+Real values (Atlas connection string, Gemini API key) live in git-ignored files only:
+- `/app/memory/secrets.local.md`
+- `/app/.env` (GEMINI_API_KEY + GEMINI_MODEL for preview)
+Preview scans use Gemini (gemini-3.6-flash), not Claude.
+- Throwaway sim account on Atlas: vercelsim@ingrelens.dev / Password123!

@@ -1,0 +1,216 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0 -- /root/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app/backend
+plugins: anyio-4.14.2, xdist-3.8.0
+collecting ... collected 147 items
+
+tests/backend_test.py::TestHealth::test_health PASSED                    [  0%]
+tests/backend_test.py::TestAuth::test_register_returns_token_and_user PASSED [  1%]
+tests/backend_test.py::TestAuth::test_register_duplicate_email_conflicts PASSED [  2%]
+tests/backend_test.py::TestAuth::test_login_valid_credentials PASSED     [  2%]
+tests/backend_test.py::TestAuth::test_login_invalid_password_401 PASSED  [  3%]
+tests/backend_test.py::TestAuth::test_login_unknown_email_401 PASSED     [  4%]
+tests/backend_test.py::TestAuth::test_brute_force_lockout_429 PASSED     [  4%]
+tests/backend_test.py::TestAuth::test_me_without_token_401 PASSED        [  5%]
+tests/backend_test.py::TestAuth::test_me_with_tampered_token_401 PASSED  [  6%]
+tests/backend_test.py::TestAuth::test_password_hash_is_bcrypt PASSED     [  6%]
+tests/backend_test.py::TestProfile::test_profile_requires_auth PASSED    [  7%]
+tests/backend_test.py::TestProfile::test_default_profile_is_empty PASSED [  8%]
+tests/backend_test.py::TestProfile::test_profile_update_persists PASSED  [  8%]
+tests/backend_test.py::TestProfile::test_profile_get_after_put_excludes_internal_ids PASSED [  9%]
+tests/backend_test.py::TestScan::test_scan_requires_auth PASSED          [ 10%]
+tests/backend_test.py::TestScan::test_scan_without_file_or_text_400 PASSED [ 10%]
+tests/backend_test.py::TestScan::test_food_scan_has_all_required_keys PASSED [ 11%]
+tests/backend_test.py::TestScan::test_food_scan_type_and_extracted_text PASSED [ 12%]
+tests/backend_test.py::TestScan::test_food_scan_score_and_ingredients_shape PASSED [ 12%]
+tests/backend_test.py::TestScan::test_food_scan_uses_real_llm_not_fallback PASSED [ 13%]
+tests/backend_test.py::TestScan::test_food_scan_personalisation_reflects_profile PASSED [ 14%]
+tests/backend_test.py::TestScan::test_medicine_scan_returns_notice PASSED [ 14%]
+tests/backend_test.py::TestScan::test_invalid_mode_defaults_to_food PASSED [ 15%]
+tests/backend_test.py::TestHistory::test_history_requires_auth PASSED    [ 16%]
+tests/backend_test.py::TestHistory::test_history_contains_scans_newest_first PASSED [ 17%]
+tests/backend_test.py::TestHistory::test_user_isolation PASSED           [ 17%]
+tests/backend_test.py::TestHistory::test_clear_history PASSED            [ 18%]
+tests/test_iter4_deploy_regression.py::test_frontend_env_file_exists_with_backend_url PASSED [ 19%]
+tests/test_iter4_deploy_regression.py::test_health PASSED                [ 19%]
+tests/test_iter4_deploy_regression.py::test_register_then_login_fresh_user PASSED [ 20%]
+tests/test_iter4_deploy_regression.py::test_seeded_profile_has_avatar PASSED [ 21%]
+tests/test_iter4_deploy_regression.py::test_partial_put_keeps_avatar PASSED [ 21%]
+tests/test_iter4_deploy_regression.py::test_barcode_food_nutella PASSED  [ 22%]
+tests/test_iter4_deploy_regression.py::test_scan_by_barcode_returns_real_analysis PASSED [ 23%]
+tests/test_iter5_gitignore_envfiles.py::test_required_env_files_not_ignored[frontend/.env] FAILED [ 23%]
+tests/test_iter5_gitignore_envfiles.py::test_required_env_files_not_ignored[backend/.env] FAILED [ 24%]
+tests/test_iter5_gitignore_envfiles.py::test_generic_env_pattern_still_active PASSED [ 25%]
+tests/test_iter5_gitignore_envfiles.py::test_git_status_reports_env_files_as_untracked_not_ignored FAILED [ 25%]
+tests/test_iter5_gitignore_envfiles.py::test_frontend_env_keys PASSED    [ 26%]
+tests/test_iter5_gitignore_envfiles.py::test_backend_env_keys[MONGO_URL] PASSED [ 27%]
+tests/test_iter5_gitignore_envfiles.py::test_backend_env_keys[DB_NAME] PASSED [ 27%]
+tests/test_iter5_gitignore_envfiles.py::test_backend_env_keys[SECRET_KEY] PASSED [ 28%]
+tests/test_iter5_gitignore_envfiles.py::test_backend_env_keys[EMERGENT_LLM_KEY] PASSED [ 29%]
+tests/test_iter5_gitignore_envfiles.py::test_backend_env_keys[CORS_ORIGINS] PASSED [ 29%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_exists PASSED [ 30%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[fastapi] PASSED [ 31%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[uvicorn] PASSED [ 31%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[click] PASSED [ 32%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[starlette] PASSED [ 33%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[pydantic] PASSED [ 34%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[motor] PASSED [ 34%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[pymongo] PASSED [ 35%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[python-multipart] PASSED [ 36%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[pillow] PASSED [ 36%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[pytesseract] PASSED [ 37%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[python-dotenv] PASSED [ 38%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[httpx] PASSED [ 38%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[bcrypt] PASSED [ 39%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_backend_requirements_contains_package[emergentintegrations] PASSED [ 40%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_uvicorn_has_standard_extra PASSED [ 40%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_root_requirements_has_click_and_starlette PASSED [ 41%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_root_and_backend_manifests_consistent PASSED [ 42%]
+tests/test_iter6_requirements.py::TestRequirementManifests::test_no_duplicate_or_malformed_lines PASSED [ 42%]
+tests/test_iter6_requirements.py::TestPipResolution::test_dry_run_resolves_click PASSED [ 43%]
+tests/test_iter6_requirements.py::TestPipResolution::test_click_and_uvicorn_importable_in_env PASSED [ 44%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[fastapi-/app/backend/requirements.txt] PASSED [ 44%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[fastapi-/app/requirements.txt] PASSED [ 45%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[uvicorn-/app/backend/requirements.txt] PASSED [ 46%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[uvicorn-/app/requirements.txt] PASSED [ 46%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[click-/app/backend/requirements.txt] PASSED [ 47%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[click-/app/requirements.txt] PASSED [ 48%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[starlette-/app/backend/requirements.txt] PASSED [ 48%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[starlette-/app/requirements.txt] PASSED [ 49%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pydantic-/app/backend/requirements.txt] PASSED [ 50%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pydantic-/app/requirements.txt] PASSED [ 51%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[annotated-doc-/app/backend/requirements.txt] PASSED [ 51%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[annotated-doc-/app/requirements.txt] PASSED [ 52%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[motor-/app/backend/requirements.txt] PASSED [ 53%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[motor-/app/requirements.txt] PASSED [ 53%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pymongo-/app/backend/requirements.txt] PASSED [ 54%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pymongo-/app/requirements.txt] PASSED [ 55%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[python-multipart-/app/backend/requirements.txt] PASSED [ 55%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[python-multipart-/app/requirements.txt] PASSED [ 56%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pillow-/app/backend/requirements.txt] PASSED [ 57%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pillow-/app/requirements.txt] PASSED [ 57%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pytesseract-/app/backend/requirements.txt] PASSED [ 58%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[pytesseract-/app/requirements.txt] PASSED [ 59%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[python-dotenv-/app/backend/requirements.txt] PASSED [ 59%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[python-dotenv-/app/requirements.txt] PASSED [ 60%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[httpx-/app/backend/requirements.txt] PASSED [ 61%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[httpx-/app/requirements.txt] PASSED [ 61%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[bcrypt-/app/backend/requirements.txt] PASSED [ 62%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[bcrypt-/app/requirements.txt] PASSED [ 63%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[emergentintegrations-/app/backend/requirements.txt] PASSED [ 63%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_package_declared[emergentintegrations-/app/requirements.txt] PASSED [ 64%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_fastapi_upper_bound_excludes_annotated_doc_era[/app/backend/requirements.txt] PASSED [ 65%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_fastapi_upper_bound_excludes_annotated_doc_era[/app/requirements.txt] PASSED [ 65%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_uvicorn_bounded_with_standard_extra[/app/backend/requirements.txt] PASSED [ 66%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_uvicorn_bounded_with_standard_extra[/app/requirements.txt] PASSED [ 67%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_starlette_bounded[/app/backend/requirements.txt] PASSED [ 68%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_starlette_bounded[/app/requirements.txt] PASSED [ 68%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_pydantic_bounded_below_v3[/app/backend/requirements.txt] PASSED [ 69%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_pydantic_bounded_below_v3[/app/requirements.txt] PASSED [ 70%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_annotated_doc_and_click_minimums[/app/backend/requirements.txt] PASSED [ 70%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_annotated_doc_and_click_minimums[/app/requirements.txt] PASSED [ 71%]
+tests/test_iter7_pins_and_shim.py::TestManifestPins::test_manifests_identical PASSED [ 72%]
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_dry_run_exit_zero PASSED [ 72%]
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_fastapi_resolved_below_0116 PASSED [ 73%]
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_annotated_doc_in_plan_or_installed PASSED [ 74%]
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_no_resolver_conflict PASSED [ 74%]
+tests/test_iter7_pins_and_shim.py::TestEntryPoints::test_shim_file_thin_and_reexports PASSED [ 75%]
+tests/test_iter7_pins_and_shim.py::TestEntryPoints::test_server_app_importable_from_backend_cwd PASSED [ 76%]
+tests/test_iter7_pins_and_shim.py::TestEntryPoints::test_app_main_importable_from_root_cwd PASSED [ 76%]
+tests/test_iter7_pins_and_shim.py::TestEntryPoints::test_both_entry_points_same_app_object PASSED [ 77%]
+tests/test_iter7_pins_and_shim.py::TestEntryPoints::test_shim_exposes_api_routes PASSED [ 78%]
+tests/test_iter7_pins_and_shim.py::test_installed_fastapi_matches_pin PASSED [ 78%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_exists[frontend/.env] PASSED [ 79%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_exists[backend/.env] PASSED [ 80%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_not_git_ignored[frontend/.env] FAILED [ 80%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_not_git_ignored[backend/.env] FAILED [ 81%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_gitignore_negations_present[!frontend/.env] PASSED [ 82%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_gitignore_negations_present[!backend/.env] PASSED [ 82%]
+tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_protected_keys_present PASSED [ 83%]
+tests/test_iter8_deploy_smoke.py::TestRequirementsManifest::test_fastapi_upper_bound_below_0_116 PASSED [ 84%]
+tests/test_iter8_deploy_smoke.py::TestRequirementsManifest::test_annotated_doc_present PASSED [ 85%]
+tests/test_iter8_deploy_smoke.py::TestRequirementsManifest::test_click_present PASSED [ 85%]
+tests/test_iter8_deploy_smoke.py::TestRequirementsManifest::test_root_and_backend_manifests_identical PASSED [ 86%]
+tests/test_iter8_deploy_smoke.py::TestServerShim::test_server_app_is_same_instance_as_app_main PASSED [ 87%]
+tests/test_iter8_deploy_smoke.py::TestServerShim::test_server_app_exposes_api_routes PASSED [ 87%]
+tests/test_iter8_deploy_smoke.py::TestLiveSmoke::test_health PASSED      [ 88%]
+tests/test_iter8_deploy_smoke.py::TestLiveSmoke::test_login_returns_token PASSED [ 89%]
+tests/test_iter8_deploy_smoke.py::TestLiveSmoke::test_profile_returns_saved_avatar PASSED [ 89%]
+tests/test_iter8_deploy_smoke.py::TestLiveSmoke::test_barcode_lookup_nutella PASSED [ 90%]
+tests/test_iter8_deploy_smoke.py::TestLiveSmoke::test_scan_barcode_only_returns_claude_analysis PASSED [ 91%]
+tests/test_new_features.py::test_health PASSED                           [ 91%]
+tests/test_new_features.py::TestOCR::test_ocr_engine_direct PASSED       [ 92%]
+tests/test_new_features.py::TestOCR::test_scan_with_image_returns_real_analysis PASSED [ 93%]
+tests/test_new_features.py::TestBarcode::test_barcode_requires_auth PASSED [ 93%]
+tests/test_new_features.py::TestBarcode::test_barcode_food_lookup PASSED [ 94%]
+tests/test_new_features.py::TestBarcode::test_barcode_unknown_404 PASSED [ 95%]
+tests/test_new_features.py::TestBarcode::test_barcode_medicine_lookup_openfda PASSED [ 95%]
+tests/test_new_features.py::TestBarcode::test_scan_with_unknown_barcode_and_no_text_400 PASSED [ 96%]
+tests/test_new_features.py::TestBarcode::test_scan_via_barcode_only PASSED [ 97%]
+tests/test_new_features.py::TestAvatar::test_avatar_persists PASSED      [ 97%]
+tests/test_new_features.py::TestAvatar::test_avatar_invalid_data_url_400 PASSED [ 98%]
+tests/test_new_features.py::TestAvatar::test_avatar_too_large_413 PASSED [ 99%]
+tests/test_new_features.py::TestAvatar::test_avatar_not_lost_on_unrelated_update PASSED [100%]
+
+=================================== FAILURES ===================================
+______________ test_required_env_files_not_ignored[frontend/.env] ______________
+tests/test_iter5_gitignore_envfiles.py:29: in test_required_env_files_not_ignored
+    assert not _ignored(rel), f"/app/{rel} is still excluded by .gitignore"
+E   AssertionError: /app/frontend/.env is still excluded by .gitignore
+E   assert not True
+E    +  where True = _ignored('frontend/.env')
+______________ test_required_env_files_not_ignored[backend/.env] _______________
+tests/test_iter5_gitignore_envfiles.py:29: in test_required_env_files_not_ignored
+    assert not _ignored(rel), f"/app/{rel} is still excluded by .gitignore"
+E   AssertionError: /app/backend/.env is still excluded by .gitignore
+E   assert not True
+E    +  where True = _ignored('backend/.env')
+__________ test_git_status_reports_env_files_as_untracked_not_ignored __________
+tests/test_iter5_gitignore_envfiles.py:44: in test_git_status_reports_env_files_as_untracked_not_ignored
+    assert "frontend/.env" in out
+E   AssertionError: assert 'frontend/.env' in ''
+____ TestEnvFilesNotGitIgnored.test_env_file_not_git_ignored[frontend/.env] ____
+tests/test_iter8_deploy_smoke.py:74: in test_env_file_not_git_ignored
+    assert proc.returncode == 1, f"{rel} IS git-ignored (rc={proc.returncode})"
+E   AssertionError: frontend/.env IS git-ignored (rc=0)
+E   assert 0 == 1
+E    +  where 0 = CompletedProcess(args=['git', 'check-ignore', '-q', 'frontend/.env'], returncode=0, stdout=b'', stderr=b'').returncode
+____ TestEnvFilesNotGitIgnored.test_env_file_not_git_ignored[backend/.env] _____
+tests/test_iter8_deploy_smoke.py:74: in test_env_file_not_git_ignored
+    assert proc.returncode == 1, f"{rel} IS git-ignored (rc={proc.returncode})"
+E   AssertionError: backend/.env IS git-ignored (rc=0)
+E   assert 0 == 1
+E    +  where 0 = CompletedProcess(args=['git', 'check-ignore', '-q', 'backend/.env'], returncode=0, stdout=b'', stderr=b'').returncode
+=============================== warnings summary ===============================
+tests/test_iter6_requirements.py::TestPipResolution::test_click_and_uvicorn_importable_in_env
+  /app/backend/tests/test_iter6_requirements.py:105: DeprecationWarning: The '__version__' attribute is deprecated and will be removed in Click 9.1. Use feature detection or 'importlib.metadata.version("click")' instead.
+    assert click.__version__.split(".")[0].isdigit()
+
+tests/test_iter6_requirements.py::TestPipResolution::test_click_and_uvicorn_importable_in_env
+  /app/backend/tests/test_iter6_requirements.py:106: DeprecationWarning: The '__version__' attribute is deprecated and will be removed in Click 9.1. Use feature detection or 'importlib.metadata.version("click")' instead.
+    assert int(click.__version__.split(".")[0]) >= 8
+
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_dry_run_exit_zero
+tests/test_iter8_deploy_smoke.py::TestRequirementsManifest::test_fastapi_upper_bound_below_0_116
+  /root/.venv/lib/python3.11/site-packages/_pytest/fixtures.py:1313: PytestRemovedIn10Warning: Class-scoped fixture defined as instance method is deprecated.
+  Instance attributes set in this fixture will NOT be visible to test methods,
+  as each test gets a new instance while the fixture runs only once per class.
+  Use @classmethod decorator and set attributes on cls instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+    fixturefunc = resolve_fixture_function(fixturedef, request)
+
+tests/test_iter7_pins_and_shim.py::TestPipDryRun::test_fastapi_resolved_below_0116
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+------ generated xml file: /app/test_reports/pytest/pytest_iter9_full.xml ------
+=========================== short test summary info ============================
+FAILED tests/test_iter5_gitignore_envfiles.py::test_required_env_files_not_ignored[frontend/.env]
+FAILED tests/test_iter5_gitignore_envfiles.py::test_required_env_files_not_ignored[backend/.env]
+FAILED tests/test_iter5_gitignore_envfiles.py::test_git_status_reports_env_files_as_untracked_not_ignored
+FAILED tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_not_git_ignored[frontend/.env]
+FAILED tests/test_iter8_deploy_smoke.py::TestEnvFilesNotGitIgnored::test_env_file_not_git_ignored[backend/.env]
+============ 5 failed, 142 passed, 5 warnings in 138.20s (0:02:18) =============
+rc=1

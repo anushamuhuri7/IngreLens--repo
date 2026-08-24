@@ -1,4 +1,4 @@
-const API = import.meta.env.REACT_APP_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_BACKEND_URL || import.meta.env.REACT_APP_BACKEND_URL || import.meta.env.VITE_API_URL || '';
 export async function request(path, options = {}) {
   const token = localStorage.getItem('ingrelens_token');
   const headers = { ...(options.headers || {}) };

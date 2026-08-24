@@ -12,9 +12,11 @@ import re
 import uuid
 from typing import Any
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import httpx
 
 EMERGENT_LLM_KEY = os.getenv("EMERGENT_LLM_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 SYSTEM_PROMPT = """You are IngreLens, an AI health analyst that reviews food and medicine labels for individuals.
 
@@ -126,6 +128,41 @@ def _shape(payload: dict[str, Any], mode: str, extracted_text: str, product_name
     }
 
 
+async def _call_gemini(prompt: str) -> str:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    payload = {
+        "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 16384,
+            "responseMimeType": "application/json",
+        },
+    }
+    async with httpx.AsyncClient(timeout=55.0) as client:
+        response = await client.post(
+            url,
+            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+            json=payload,
+        )
+    response.raise_for_status()
+    body = response.json()
+    parts = body["candidates"][0]["content"]["parts"]
+    return "".join(p.get("text", "") for p in parts)
+
+
+async def _call_claude(prompt: str) -> str:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"ingrelens-{uuid.uuid4().hex[:12]}",
+        system_message=SYSTEM_PROMPT,
+    ).with_model("anthropic", "claude-sonnet-5")
+    reply = await chat.send_message(UserMessage(text=prompt))
+    return reply if isinstance(reply, str) else str(reply)
+
+
 async def analyze_label(
     *,
     extracted_text: str,
@@ -133,8 +170,8 @@ async def analyze_label(
     mode: str,
     product_name: str,
 ) -> dict[str, Any]:
-    if not EMERGENT_LLM_KEY:
-        return _fallback(mode, extracted_text, "AI service is not configured. Ask an administrator to set EMERGENT_LLM_KEY.")
+    if not (GEMINI_API_KEY or EMERGENT_LLM_KEY):
+        return _fallback(mode, extracted_text, "AI service is not configured. Ask an administrator to set GEMINI_API_KEY.")
     if not extracted_text or not extracted_text.strip():
         return _fallback(mode, extracted_text, "We couldn't read the label. Please retake with better lighting.")
 
@@ -153,16 +190,11 @@ async def analyze_label(
     )
 
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"ingrelens-{uuid.uuid4().hex[:12]}",
-            system_message=SYSTEM_PROMPT,
-        ).with_model("anthropic", "claude-sonnet-5")
-        reply = await chat.send_message(UserMessage(text=prompt))
+        reply = await (_call_gemini(prompt) if GEMINI_API_KEY else _call_claude(prompt))
     except Exception as exc:  # noqa: BLE001
         return _fallback(mode, extracted_text, f"AI analysis is temporarily unavailable ({exc.__class__.__name__}). Please retry in a moment.")
 
-    payload = _extract_json(reply if isinstance(reply, str) else str(reply))
+    payload = _extract_json(reply)
     if not payload:
         return _fallback(mode, extracted_text, "AI returned an unreadable response. Please retry the scan.")
     return _shape(payload, mode, extracted_text, product_name)

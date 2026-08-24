@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 # Load env from /app/backend/.env explicitly (supervisor cwd is /app)
 load_dotenv(Path(__file__).resolve().parent.parent / "backend" / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")  # root .env (git-ignored secrets)
 load_dotenv()  # also picks up default cwd .env if present
 
 from app.ai_analyzer import analyze_label  # noqa: E402

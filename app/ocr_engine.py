@@ -10,8 +10,12 @@ from __future__ import annotations
 import io
 import re
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-import pytesseract
+try:
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:  # serverless (Vercel): OCR runs in the browser instead
+    OCR_AVAILABLE = False
 
 
 def preprocess_image(image_bytes: bytes) -> Image.Image:
@@ -40,6 +44,8 @@ def _clean(text: str) -> str:
 
 def extract_text_from_image(image_bytes: bytes) -> str:
     """Extract text from a label image. Returns "" on any failure."""
+    if not OCR_AVAILABLE:
+        return ""
     try:
         processed = preprocess_image(image_bytes)
     except Exception:

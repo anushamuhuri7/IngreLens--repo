@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 11 verified this session's changes end-to-end: browser-side tesseract.js OCR flow, Gemini (gemini-3.6-flash) provider on /api/scan, the post-login profile+history fetch bug fix, plus auth/profile/barcode/history regressions and Vercel deploy static config. Backend: new pytest file test_iter11_ocr_gemini.py -> 26/26 passed (AI scan calls limited to 2 to preserve Gemini quota). Frontend: 3 Playwright runs on the preview URL (mobile 390x844) covering login->immediate history/profile, paste-text AI scan, image-upload browser OCR -> AI scan, and profile save. All passed; no blocking issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (app/main.py)", "issue": "CORS_ORIGINS defaults to '*' with allow_credentials=True (carried over from iteration 10, still open). Harmless today (Bearer tokens, no cookies) but invalid per spec."},
+      {"endpoint": "/api/auth/login", "issue": "No rate limiting / brute-force lockout on repeated failed logins (playbook item unmet; the auth here is custom token auth, not the Emergent auth playbook)."},
+      {"endpoint": "make_token (app/main.py)", "issue": "Signed base64 token has no expiry/revocation; 401 message 'session expired' is misleading."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home news carousel", "issues": ["One Unsplash carousel image intermittently failed with net::ERR_BLOCKED_BY_ORB in one of three runs (images.unsplash.com/photo-1615486364155-...). A later run showed 0 broken images. Consider an onError fallback/placeholder for remote article images."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_ocr_gemini.py",
+    "/app/test_reports/pytest/iter11_results.xml"
+  ],
+  "action_items": [
+    "Optional: add an onError placeholder for remote Unsplash news images (one ORB-blocked load observed).",
+    "Optional cleanup before deploy: delete dead SQLAlchemy-era modules (app/database.py, app/dependencies.py, app/models.py, app/analyzer.py, app/ai_explainer.py, app/routers/*, ingrelens.db, supabase_schema.sql, migrate_to_supabase.py, render.yaml). They import sqlalchemy which is NOT in the slim requirements.txt; safe today only because app/main.py never imports them.",
+    "Note: my seeded-account scan tests added 2 history rows named 'TEST Iter11 Granola' plus 'QA Paste Granola'/'QA OCR Granola' to ingretest@ingrelens.dev history (seeded history was NOT deleted, per instructions)."
+  ],
+  "critical_code_review_comments": [
+    "Verified: /api/scan text-only path works (file param optional), Gemini selected when GEMINI_API_KEY is set (_call_gemini(prompt) if GEMINI_API_KEY else _call_claude(prompt)), and responses exclude Mongo _id.",
+    "Verified: onAuthed() now fetches /api/profile + /api/history after login; UI showed 17 history items and 'peanut' allergy tag immediately without refresh.",
+    "Dead sqlalchemy modules remain in /app/app — remove them so the Vercel function bundle cannot accidentally import missing deps.",
+    "src/lib/ocr.js swallows OCR errors (catch { return '' }) — a worker/CDN failure is indistinguishable from an unreadable photo; consider logging/distinct messaging."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter11_ocr_gemini.py"],
+  "success_rate": {"backend": "100% (26/26)", "frontend": "100% (all tested flows passed)"},
+  "seed_data_creation": "One throwaway account TEST_iter11_*@ingrelens.dev (register/profile/scan/history-delete test). Seeded account ingretest@ingrelens.dev used read/write for scans; its history was preserved.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! — login 200 via API and UI; wrong password -> 401",
+  "context_for_next_testing_agent": "Verified live on preview URL: (1) Browser OCR: generated /tmp/label_test.png (LiberationSans-Bold 36px, 950x320, 'INGREDIENTS: WHEAT FLOUR, SUGAR, PEANUTS, PALM OIL, SALT'); uploaded via [data-testid=scan-file-input] — NOTE this input is CSS-hidden, so use state='attached' before set_input_files. Notice sequence observed: 'Reading label text in your browser…' -> 'Analyzing with AI…'. Extracted text panel showed exact OCR output; result 1.0/10 Avoid, 5 ingredient rows, PEANUTS=Hazardous, profile-match-alert 'peanut, low sugar'. OCR completed in <20s (tesseract CDN reachable from preview). (2) Paste-text scan same quality. (3) Gemini backend: overall_verdict/safety_score/ingredients/summary_ai fields (NOT 'verdict'/'personalized_summary'); no fallback text. (4) Barcode 3017620422003 -> openfoodfacts Nutella; unknown barcode -> 404. (5) Static deploy checks all pass: vercel.json rewrite /api/(.*)->/api/index + maxDuration 60, api/index.py imports app.main:app, requirements.txt free of pytesseract/pillow/emergentintegrations/uvicorn, package.json has tesseract.js and no @supabase, package-lock.json absent and staged 'D' in git. Full legacy suite (147 tests) NOT re-run this iteration to conserve Gemini quota (it makes ~8 AI scan calls).",
+  "rca_of_the_issue": "Reported post-login bug (profile/history not fetched after fresh login) is fixed: App.onAuthed now issues Promise.all([/api/profile, /api/history]) in addition to the mount-time effect; confirmed in UI without refresh."
+}
