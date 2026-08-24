@@ -1,12 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Aperture, ArrowLeft, Camera, Check, ChevronRight, Clock3, Crop, FileImage, History as HistoryIcon, Home, LogOut, Plus, RotateCcw, ShieldCheck, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Aperture, ArrowLeft, Camera, Check, ChevronLeft, ChevronRight, Clock3, Crop, ExternalLink, FileImage, History as HistoryIcon, Home, ImagePlus, LogOut, Plus, RotateCcw, ScanBarcode, ShieldCheck, Sparkles, Trash2, Upload, UserRound, X } from 'lucide-react';
+import BarcodeScanner from './components/BarcodeScanner';
 import { auth, request, submitScan } from './lib/api';
 
-const initialProfile = { goals: ['Low sodium'], allergies: [], conditions: [], medicines: [], age: '' };
+const initialProfile = { goals: ['Low sodium'], allergies: [], conditions: [], medicines: [], age: '', avatar: '' };
 const tagGroups = [
   ['goals', 'Health goals', 'Add a goal, e.g. Low Sodium'],
   ['allergies', 'Allergies & conditions', 'Add allergy or condition'],
   ['medicines', 'Current medicines', 'Add a medicine'],
+];
+
+const NEWS_ARTICLES = [
+  { kicker: 'AI INSIGHT', title: 'Hidden sodium: decoding food labels for everyday care', photo: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80', href: 'https://www.heart.org/en/healthy-living/healthy-eating/eat-smart/sodium/sodium-and-salt' },
+  { kicker: 'NUTRITION', title: 'Spotting ultra-processed foods in seconds', photo: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80', href: 'https://www.hsph.harvard.edu/nutritionsource/processed-foods/' },
+  { kicker: 'MEDICINE', title: 'Reading prescription labels the right way', photo: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80', href: 'https://www.fda.gov/drugs/drug-information-consumers/understanding-over-counter-medicines' },
+  { kicker: 'ALLERGIES', title: 'The 9 major food allergens now on every U.S. label', photo: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=600&q=80', href: 'https://www.fda.gov/food/food-labeling-nutrition/food-allergies' },
+  { kicker: 'INTERACTIONS', title: 'Grapefruit, greens & meds — what to eat with care', photo: 'https://images.unsplash.com/photo-1615486364155-6f9f10b6a1f8?auto=format&fit=crop&w=600&q=80', href: 'https://www.mayoclinic.org/healthy-lifestyle/consumer-health/expert-answers/food-and-nutrition/faq-20058586' },
+  { kicker: 'SUGAR', title: 'Added sugar vs. natural sugar — how to tell them apart', photo: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80', href: 'https://www.who.int/news-room/fact-sheets/detail/healthy-diet' },
 ];
 
 function Brand() {
@@ -16,6 +26,14 @@ function Brand() {
       <b>Ingre<span>Lens</span></b>
     </div>
   );
+}
+
+function Avatar({ user, profile, size = 'sm', ...rest }) {
+  const initial = (user?.name || 'I').trim()[0]?.toUpperCase() || 'I';
+  const src = profile?.avatar;
+  const cls = size === 'lg' ? 'avatar large' : 'avatar';
+  if (src) return <button className={`${cls} has-photo`} {...rest}><img src={src} alt="Profile" /></button>;
+  return <button className={cls} {...rest}>{initial}</button>;
 }
 
 function Auth({ onDone }) {
@@ -85,22 +103,71 @@ function Nav({ page, go }) {
   );
 }
 
+function NewsCarousel() {
+  const trackRef = useRef(null);
+  const [index, setIndex] = useState(0);
+  function scrollTo(i) {
+    const track = trackRef.current; if (!track) return;
+    const card = track.children[i]; if (!card) return;
+    track.scrollTo({ left: card.offsetLeft - track.offsetLeft, behavior: 'smooth' });
+    setIndex(i);
+  }
+  function onScroll() {
+    const track = trackRef.current; if (!track) return;
+    const nearest = Array.from(track.children).findIndex(c => c.offsetLeft - track.offsetLeft >= track.scrollLeft - 8);
+    if (nearest >= 0 && nearest !== index) setIndex(nearest);
+  }
+  return (
+    <section className="news-section">
+      <div className="section-head">
+        <h2>Health news & AI insights</h2>
+        <span><Sparkles size={14} /> Tailored to you</span>
+      </div>
+      <div className="news-track" ref={trackRef} onScroll={onScroll} data-testid="news-carousel">
+        {NEWS_ARTICLES.map((article, i) => (
+          <a
+            key={article.href}
+            className="news-slide"
+            href={article.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid={`news-slide-${i}`}
+          >
+            <div className="news-photo" style={{ backgroundImage: `url(${article.photo})` }} />
+            <div className="news-body">
+              <span className="kicker">{article.kicker}</span>
+              <h3>{article.title}</h3>
+              <span className="news-cta" data-testid={`news-cta-${i}`}>Read article <ExternalLink size={12} /></span>
+            </div>
+          </a>
+        ))}
+      </div>
+      <div className="news-controls">
+        <button data-testid="news-prev-button" onClick={() => scrollTo(Math.max(0, index - 1))} aria-label="Previous article"><ChevronLeft size={16} /></button>
+        <div className="news-dots" data-testid="news-dots">
+          {NEWS_ARTICLES.map((_, i) => (
+            <button key={i} className={i === index ? 'active' : ''} data-testid={`news-dot-${i}`} onClick={() => scrollTo(i)} aria-label={`Go to article ${i + 1}`} />
+          ))}
+        </div>
+        <button data-testid="news-next-button" onClick={() => scrollTo(Math.min(NEWS_ARTICLES.length - 1, index + 1))} aria-label="Next article"><ChevronRight size={16} /></button>
+      </div>
+    </section>
+  );
+}
+
 function HomePage({ user, go, startScan, profile }) {
   return (
     <div className="page">
-      <header className="topbar"><Brand /><button className="avatar" data-testid="home-profile-button" onClick={() => go('profile')}>{(user.name || 'I')[0]}</button></header>
+      <header className="topbar">
+        <Brand />
+        <Avatar user={user} profile={profile} data-testid="home-profile-button" onClick={() => go('profile')} />
+      </header>
       <section className="welcome">
         <span className="kicker">● PERSONAL SHIELD ACTIVE</span>
         <h1>Hello, {user.name || 'there'}</h1>
         <p>Make your next choice with a little more clarity.</p>
       </section>
-      <section className="insights">
-        <div className="section-head"><h2>Health news & AI insights</h2><span><Sparkles size={14} /> Tailored to you</span></div>
-        <div className="news-grid">
-          <article className="news-card"><div className="news-photo photo-one" /><div><span className="kicker">AI INSIGHT</span><h3>Hidden sodium: decoding labels for everyday care</h3><button data-testid="news-read-more-button">Read more <ChevronRight size={14} /></button></div></article>
-          <article className="news-card"><div className="news-photo photo-two" /><div><span className="kicker">NUTRITION</span><h3>Spotting ultra-processed foods in seconds</h3><button data-testid="news-second-read-more-button">Read more <ChevronRight size={14} /></button></div></article>
-        </div>
-      </section>
+      <NewsCarousel />
       <section>
         <div className="section-head"><h2>Quick scan</h2><span>{profile.allergies.length} profile filters</span></div>
         <div className="scan-options">
@@ -120,23 +187,16 @@ function HomePage({ user, go, startScan, profile }) {
 function CropEditor({ src, onCancel, onDone }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
-  const [layout, setLayout] = useState({ w: 320, h: 240, natW: 1, natH: 1 });
+  const [layout, setLayout] = useState({ w: 320, h: 240 });
   const [box, setBox] = useState({ x: 0.1, y: 0.2, w: 0.8, h: 0.6 });
   const drag = useRef(null);
-
   function onImageLoad() {
-    const img = imgRef.current;
     const container = containerRef.current;
-    if (!img || !container) return;
+    if (!container) return;
     const rect = container.getBoundingClientRect();
-    setLayout({ w: rect.width, h: rect.height, natW: img.naturalWidth, natH: img.naturalHeight });
+    setLayout({ w: rect.width, h: rect.height });
   }
-
-  function pointer(e) {
-    const t = e.touches ? e.touches[0] : e;
-    return { x: t.clientX, y: t.clientY };
-  }
-
+  function pointer(e) { const t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
   function start(mode) {
     return (e) => {
       e.preventDefault();
@@ -146,7 +206,6 @@ function CropEditor({ src, onCancel, onDone }) {
       window.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end);
     };
   }
-
   function move(e) {
     if (!drag.current) return;
     e.preventDefault?.();
@@ -168,15 +227,12 @@ function CropEditor({ src, onCancel, onDone }) {
     }
     setBox(next);
   }
-
   function end() {
     drag.current = null;
     window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', end);
     window.removeEventListener('touchmove', move); window.removeEventListener('touchend', end);
   }
-
   function reset() { setBox({ x: 0.1, y: 0.2, w: 0.8, h: 0.6 }); }
-
   function apply() {
     const img = imgRef.current; if (!img) return;
     const cx = Math.round(box.x * img.naturalWidth);
@@ -191,7 +247,6 @@ function CropEditor({ src, onCancel, onDone }) {
       onDone(file, URL.createObjectURL(blob));
     }, 'image/jpeg', 0.92);
   }
-
   return (
     <div className="crop-overlay" data-testid="crop-editor">
       <header>
@@ -201,12 +256,7 @@ function CropEditor({ src, onCancel, onDone }) {
       </header>
       <div className="crop-stage" ref={containerRef}>
         <img ref={imgRef} src={src} onLoad={onImageLoad} alt="Label to crop" draggable={false} />
-        <div
-          className="crop-box"
-          style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%` }}
-          onMouseDown={start('move')} onTouchStart={start('move')}
-          data-testid="crop-box"
-        >
+        <div className="crop-box" style={{ left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%` }} onMouseDown={start('move')} onTouchStart={start('move')} data-testid="crop-box">
           <span className="crop-handle tl" onMouseDown={start('tl')} onTouchStart={start('tl')} data-testid="crop-handle-tl" />
           <span className="crop-handle br" onMouseDown={start('br')} onTouchStart={start('br')} data-testid="crop-handle-br" />
         </div>
@@ -226,9 +276,12 @@ function ScanPage({ mode, go, onResult }) {
   const [preview, setPreview] = useState('');
   const [text, setText] = useState('');
   const [name, setName] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [cropping, setCropping] = useState(false);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
   const video = useRef(null);
   const input = useRef(null);
   useEffect(() => () => stream?.getTracks().forEach(t => t.stop()), [stream]);
@@ -242,7 +295,6 @@ function ScanPage({ mode, go, onResult }) {
       setError('Camera access is unavailable. Upload a clear label photo instead.');
     }
   }
-
   function capture() {
     const canvas = document.createElement('canvas');
     canvas.width = video.current.videoWidth;
@@ -254,27 +306,41 @@ function ScanPage({ mode, go, onResult }) {
       setCamera(false); stream?.getTracks().forEach(t => t.stop());
     }, 'image/jpeg', 0.9);
   }
-
   function pickFile(e) {
     const next = e.target.files?.[0];
     if (!next) return;
     setFile(next); setPreview(URL.createObjectURL(next));
     setCamera(false); stream?.getTracks().forEach(t => t.stop());
   }
-
+  async function onBarcodeDetected(code) {
+    setScanningBarcode(false);
+    setBarcode(code);
+    setNotice(`Barcode ${code} captured — looking it up…`);
+    try {
+      const info = await request(`/api/barcode/${encodeURIComponent(code)}?mode=${encodeURIComponent(mode)}`);
+      if (info.product_name && !name) setName(info.product_name);
+      if (info.ingredients_text) setText(t => (t ? t : info.ingredients_text));
+      setNotice(`Found "${info.product_name}" via ${info.source === 'openfoodfacts' ? 'Open Food Facts' : 'OpenFDA'}. Tap Analyze to get your personal report.`);
+    } catch (err) {
+      setNotice('');
+      setError(err.message || "We couldn't find that barcode. Try scanning the label instead.");
+    }
+  }
   async function analyze(e) {
     e.preventDefault();
-    if (!file && !text.trim()) return;
-    setBusy(true); setError('');
+    if (!file && !text.trim() && !barcode) return;
+    setBusy(true); setError(''); setNotice('');
     try {
-      onResult(await submitScan({ file, text, productName: name || (mode === 'FOOD' ? 'Food label' : 'Medicine label'), mode }));
+      onResult(await submitScan({ file, text, productName: name || (mode === 'FOOD' ? 'Food label' : 'Medicine label'), mode, barcode }));
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
 
+  if (scanningBarcode) {
+    return <BarcodeScanner onDetected={onBarcodeDetected} onCancel={() => setScanningBarcode(false)} />;
+  }
   if (cropping && preview) {
     return <CropEditor src={preview} onCancel={() => setCropping(false)} onDone={(nextFile, nextPreview) => { setFile(nextFile); setPreview(nextPreview); setCropping(false); }} />;
   }
-
   if (camera) {
     return (
       <div className="camera-screen">
@@ -295,7 +361,6 @@ function ScanPage({ mode, go, onResult }) {
       </div>
     );
   }
-
   return (
     <div className="page">
       <header className="subbar">
@@ -306,17 +371,30 @@ function ScanPage({ mode, go, onResult }) {
         <span className={`option-icon ${mode === 'FOOD' ? 'food' : 'medicine'}`}>{mode === 'FOOD' ? <Sparkles /> : <ShieldCheck />}</span>
         <span className="kicker">{mode} SCAN MODE</span>
         <h1>What are you checking?</h1>
-        <p>Capture a label or paste its text for a personalized safety report.</p>
+        <p>Capture a label, scan the barcode, or paste the text — we'll compare it with your profile.</p>
       </div>
       <form className="form scan-form" onSubmit={analyze}>
         <label>PRODUCT NAME
           <input data-testid="scan-product-name-input" value={name} onChange={e => setName(e.target.value)} placeholder={mode === 'FOOD' ? 'e.g. Harvest Oat Granola' : 'e.g. Paracetamol 500 mg'} />
         </label>
-        <button type="button" className="camera-cta" data-testid="open-camera-button" onClick={openCamera}>
-          <Camera />
-          <span><b>Open camera</b><small>Live capture with label guide</small></span>
-          <ChevronRight />
-        </button>
+        <div className="scan-inputs">
+          <button type="button" className="camera-cta" data-testid="open-camera-button" onClick={openCamera}>
+            <Camera />
+            <span><b>Open camera</b><small>Capture label for OCR</small></span>
+            <ChevronRight />
+          </button>
+          <button type="button" className="camera-cta" data-testid="open-barcode-button" onClick={() => { setError(''); setScanningBarcode(true); }}>
+            <ScanBarcode />
+            <span><b>Scan barcode</b><small>Auto-fill from open catalog</small></span>
+            <ChevronRight />
+          </button>
+        </div>
+        {barcode && (
+          <div className="barcode-chip" data-testid="barcode-chip">
+            <ScanBarcode size={13} /> {barcode}
+            <button type="button" onClick={() => { setBarcode(''); setNotice(''); }} data-testid="barcode-clear-button"><X size={11} /></button>
+          </div>
+        )}
         {file && (
           <div className="capture-preview" data-testid="capture-preview">
             <img src={preview} alt="Captured label preview" />
@@ -331,10 +409,11 @@ function ScanPage({ mode, go, onResult }) {
           <b>{file ? file.name : 'Upload a label photo'}</b>
           <small>JPG, PNG or WEBP</small>
         </label>
-        <div className="or"><span>OR PASTE LABEL TEXT</span></div>
+        <div className="or"><span>OR PASTE / EDIT LABEL TEXT</span></div>
         <textarea data-testid="scan-text-input" value={text} onChange={e => setText(e.target.value)} placeholder={mode === 'FOOD' ? 'Ingredients: oats, sugar, sodium…' : 'Active ingredient, dosage, directions…'} rows="5" />
+        {notice && <p className="notice" data-testid="scan-notice">{notice}</p>}
         {error && <p className="error" data-testid="scan-error">{error}</p>}
-        <button className="button primary" data-testid="analyze-label-button" disabled={busy || (!file && !text.trim())}>{busy ? 'Analyzing label…' : 'Analyze label'} <Sparkles size={17} /></button>
+        <button className="button primary" data-testid="analyze-label-button" disabled={busy || (!file && !text.trim() && !barcode)}>{busy ? 'Analyzing label…' : 'Analyze label'} <Sparkles size={17} /></button>
       </form>
     </div>
   );
@@ -349,6 +428,7 @@ function Results({ result, go }) {
       <section className="result-hero">
         <span className="kicker">{result.type} LABEL</span>
         <h1>{result.product_name}</h1>
+        {result.barcode?.image_url && <img className="result-photo" src={result.barcode.image_url} alt={result.product_name} data-testid="result-photo" />}
         <div className={`score ${color}`} data-testid="safety-score"><strong>{score.toFixed(1)}</strong><span>/10<br />{result.overall_verdict}</span></div>
         <div className="meter"><i style={{ width: `${score * 10}%` }} /></div>
         <div className="meter-labels"><span>Needs care</span><span>Safer choice</span></div>
@@ -381,31 +461,86 @@ function Results({ result, go }) {
           <ul>{result.recommendations.map((rec, i) => <li key={i} data-testid={`recommendation-${i}`}><Check size={13} /> {rec}</li>)}</ul>
         </section>
       )}
+      {result.extracted_text && (
+        <details className="extracted-text" data-testid="extracted-text-panel">
+          <summary>View extracted label text</summary>
+          <pre data-testid="extracted-text">{result.extracted_text}</pre>
+        </details>
+      )}
       {result.medicine_notice && <p className="disclaimer" data-testid="medicine-disclaimer">{result.medicine_notice} This information is educational and does not replace professional advice.</p>}
       <button className="button primary" data-testid="save-result-button" onClick={() => go('history')}>View saved history <Clock3 size={17} /></button>
     </div>
   );
 }
 
+function resizeAvatar(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error('No file selected'));
+    if (!file.type.startsWith('image/')) return reject(new Error('Please pick an image file'));
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 320;
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const min = Math.min(img.width, img.height);
+        const sx = (img.width - min) / 2;
+        const sy = (img.height - min) / 2;
+        ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Could not read the image'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function Profile({ profile, setProfile, user, logout }) {
   const [draft, setDraft] = useState(profile);
   const [entry, setEntry] = useState({});
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const fileRef = useRef(null);
+  useEffect(() => { setDraft(profile); }, [profile]);
   function add(key) {
     if (!entry[key]?.trim()) return;
     setDraft({ ...draft, [key]: [...draft[key], entry[key].trim()] });
     setEntry({ ...entry, [key]: '' });
   }
+  async function pickAvatar(e) {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    try {
+      const dataUrl = await resizeAvatar(file);
+      setDraft(d => ({ ...d, avatar: dataUrl }));
+      setError('');
+    } catch (err) { setError(err.message); }
+  }
   async function save() {
-    await request('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) });
-    setProfile(draft); setSaved(true); setTimeout(() => setSaved(false), 1800);
+    setError('');
+    try {
+      await request('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) });
+      setProfile(draft); setSaved(true); setTimeout(() => setSaved(false), 1800);
+    } catch (err) { setError(err.message); }
   }
   return (
     <div className="page">
       <header className="subbar"><span /><span className="kicker">PROFILE SETTINGS</span></header>
       <section className="profile-head">
-        <div className="avatar large">{(user.name || 'I')[0]}</div>
-        <div><h1>My health profile</h1><p>Profile active · Health shield enabled</p></div>
+        <div className="avatar large avatar-editable">
+          {draft.avatar ? <img src={draft.avatar} alt="Profile" data-testid="profile-avatar-preview" /> : (user.name || 'I')[0]}
+          <button type="button" className="avatar-edit" data-testid="upload-avatar-button" onClick={() => fileRef.current?.click()} aria-label="Change profile photo"><ImagePlus size={14} /></button>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickAvatar} data-testid="avatar-file-input" />
+        </div>
+        <div>
+          <h1>My health profile</h1>
+          <p>Profile active · Health shield enabled</p>
+          {draft.avatar && <button type="button" className="avatar-remove" data-testid="remove-avatar-button" onClick={() => setDraft({ ...draft, avatar: '' })}>Remove photo</button>}
+        </div>
       </section>
       <section className="profile-section">
         <h2>Personal details</h2>
@@ -419,6 +554,7 @@ function Profile({ profile, setProfile, user, logout }) {
           <div className="add-row"><input data-testid={`profile-${key}-input`} value={entry[key] || ''} onChange={e => setEntry({ ...entry, [key]: e.target.value })} placeholder={placeholder} /><button data-testid={`profile-${key}-add-button`} onClick={() => add(key)}><Plus size={16} /> Add</button></div>
         </section>
       ))}
+      {error && <p className="error" data-testid="profile-error">{error}</p>}
       {saved && <p className="saved" data-testid="profile-saved-message"><Check size={15} /> Changes saved</p>}
       <button className="button primary" data-testid="save-profile-button" onClick={save}>Save changes <Check size={17} /></button>
       <button className="logout" data-testid="logout-button" onClick={logout}><LogOut size={16} /> Log out</button>
@@ -429,7 +565,7 @@ function Profile({ profile, setProfile, user, logout }) {
 function History({ go, history, clear }) {
   const [query, setQuery] = useState('');
   const [confirm, setConfirm] = useState(false);
-  const items = history.filter(x => (x.product_name || '').toLowerCase().includes(query.toLowerCase()));
+  const items = useMemo(() => history.filter(x => (x.product_name || '').toLowerCase().includes(query.toLowerCase())), [history, query]);
   return (
     <div className="page">
       <header className="subbar"><h1>Scan history</h1><button className="danger-link" data-testid="delete-history-button" onClick={() => setConfirm(true)}><Trash2 size={15} /> Delete all</button></header>

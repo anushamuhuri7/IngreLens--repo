@@ -1,0 +1,52 @@
+{
+  "summary": "Backend-only iteration 3 testing of IngreLens. Ran the full existing regression suite (22/22 passed) plus a new suite for this iteration's features (12/13 passed): real tesseract OCR via /api/scan, GET /api/barcode/{code} (OpenFoodFacts + OpenFDA), scan-by-barcode, and profile avatar data-URL persistence/validation/size-cap. All requested acceptance criteria verified as working. One non-requested behavioural gap found (partial profile PUT wipes avatar) plus an NDC normalisation limitation for real medicine package barcodes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "PUT /api/profile",
+        "issue": "PUT is full-replace: sending a partial body (e.g. {\"goals\":[\"low sugar\"]}) resets avatar (and all other omitted fields) to their defaults because ProfilePayload defaults are $set unconditionally. Current UI always posts the whole draft so it is not user-visible today, but any partial client/3rd-party call silently deletes the uploaded photo. Consider only $set fields explicitly provided (model_dump(exclude_unset=True)) or documenting PUT as full-replace."
+      },
+      {
+        "endpoint": "GET /api/barcode/{code} (MEDICINE)",
+        "issue": "_normalise_ndc only produces 5-4-2 / 4-4-2 layouts. Real drug package barcodes (10/11-digit package NDC, e.g. 7642074601 for product_ndc 76420-746) therefore fail lookup while the already-hyphenated product_ndc (76420-746) works. GTIN-12/13 drug barcodes (leading '3' + NDC) are also unhandled. Verified: /api/barcode/76420-746?mode=MEDICINE -> 200 openfda; /api/barcode/7642074601?mode=MEDICINE -> 404."
+      },
+      {
+        "endpoint": "GET /api/barcode/9999999999999",
+        "issue": "Not a backend defect but the requested 404 fixture is invalid: OpenFoodFacts actually returns a real test product (product_name 'Salatgurke', brand 'TestMarke') for 9999999999999, so the endpoint correctly answers 200. The 404 path was re-verified with 7777777777770 (genuinely absent) -> 404 with detail \"We couldn't find this barcode in the open catalog.\""
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter3_new_features.xml",
+    "/app/test_reports/pytest/iter3_regression.xml"
+  ],
+  "action_items": [
+    "Decide on PUT /api/profile semantics: use exclude_unset (merge) so partial updates cannot wipe the avatar, or keep full-replace and document it.",
+    "Improve _normalise_ndc so 10/11-digit package NDCs and GTIN-12/13 drug barcodes resolve (try multiple hyphenation splits and strip GTIN check/prefix digits before querying OpenFDA)."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/.env does not exist in this repo (Vite app lives at /app/src and calls relative /api paths). Test harness therefore falls back to a hardcoded preview URL in backend_test.py/test_new_features.py — consider adding frontend/.env with REACT_APP_BACKEND_URL so tests/tools resolve the base URL from env only.",
+    "src/App.jsx is 636 lines and app/main.py 300 lines; App.jsx should be split into route/feature modules per the file-size guideline.",
+    "Avatar cap is enforced on the data-URL character length (MAX_AVATAR_BYTES=250_000) rather than decoded bytes; naming/semantics are misleading though behaviour (413) is correct.",
+    "/api/scan silently ignores an unresolvable barcode; when only a barcode is supplied and lookup fails the user gets the generic 400 'Add a label photo, barcode or paste the label text first' instead of 'barcode not found' — confusing for barcode-only scans."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "97% (34/35 assertions-level tests; 22/22 regression + 12/13 new-feature)", "frontend": "not tested"},
+  "seed_data_creation": "Throwaway TEST_*@ingrelens.test users created per run and purged by the module/session cleanup fixtures. Seeded QA account ingretest@ingrelens.dev used read-only for barcode lookups.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ingretest@ingrelens.dev / Password123! (present in /app/memory/test_credentials.md, login verified 200)",
+  "context_for_next_testing_agent": "Verified working this iteration: GET /api/health; OCR (app.ocr_engine.extract_text_from_image on a rendered 900x400 label returns 'flour/sugar/salt'; POST /api/scan with a PNG file returns real Claude output, total_ingredients>0, no 'AI service' fallback); GET /api/barcode/3017620422003?mode=FOOD -> Nutella/openfoodfacts/FOOD with non-empty packed_text; barcode endpoint 401 without token; POST /api/scan with only barcode=3017620422003 -> product_name Nutella, barcode.source openfoodfacts, persisted in /api/history; avatar data-URL persists via PUT+GET /api/profile; avatar='hello world' -> 400; >250k chars -> 413. Note: DejaVu fonts are NOT installed in this container — OCR fixture uses LiberationSans-Bold/FreeSansBold fallback (FONT_CANDIDATES in test_new_features.py). Also note backend_test.py TestProfile expectations were updated for the new 'avatar' key. Only known failing test: TestAvatar::test_avatar_not_lost_on_unrelated_update (partial PUT wipes avatar) — left failing intentionally to track the issue.",
+  "rca_of_the_issue": "Avatar wipe: PUT /api/profile validates a full ProfilePayload and does profiles_col.update_one($set={**payload.model_dump(), ...}). Pydantic fills omitted fields with their defaults ('' / []), so any partial request overwrites stored values, including the avatar. Fix by dumping with exclude_unset=True (and skipping the avatar validation when the key is absent). Medicine barcode 404s: _normalise_ndc guesses a single hyphenation layout (5-4-2 for 11 digits, 4-4-2 for 10) which does not match labeler-specific NDC segment lengths, so package NDCs scanned off real packs miss both product_ndc and package_ndc searches."
+}

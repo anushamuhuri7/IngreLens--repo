@@ -219,7 +219,14 @@ class TestProfile:
         r = api_client.get(f"{API}/profile", headers={"Authorization": f"Bearer {token}"}, timeout=30)
         assert r.status_code == 200
         data = r.json()
-        assert data == {"goals": [], "allergies": [], "conditions": [], "medicines": [], "age": ""}
+        assert data == {
+            "goals": [],
+            "allergies": [],
+            "conditions": [],
+            "medicines": [],
+            "age": "",
+            "avatar": "",
+        }
 
     def test_profile_update_persists(self, api_client, scan_headers):
         payload = {
@@ -231,7 +238,9 @@ class TestProfile:
         }
         put = api_client.put(f"{API}/profile", json=payload, headers=scan_headers, timeout=30)
         assert put.status_code == 200, put.text[:300]
-        assert put.json() == payload
+        returned = put.json()
+        for key, value in payload.items():
+            assert returned[key] == value
 
         get = api_client.get(f"{API}/profile", headers=scan_headers, timeout=30)
         assert get.status_code == 200

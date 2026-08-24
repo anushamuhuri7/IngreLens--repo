@@ -27,6 +27,12 @@ Use the github repository and the video (for front-end), complete camera and OCR
 - Interactive image crop overlay before analysis (`CropEditor` in `App.jsx`).
 - Personalised "Recommendations" section rendered on the Results page.
 - Seeded test account documented in `/app/memory/test_credentials.md`.
+- Barcode scanner (ZXing) + backend enrichment via OpenFoodFacts (food) and OpenFDA (medicine) with multi-layout NDC + GTIN-13 handling.
+- Real OCR: tesseract-ocr installed; preprocessing upgraded (EXIF transpose, upscaling, autocontrast, dual-PSM).
+- Extracted text is surfaced back on the Results screen so users can verify what the AI actually read.
+- Home news carousel with real links (Harvard, FDA, WHO, Mayo Clinic, AHA) — swipeable + prev/next controls.
+- Profile picture upload (client-downscaled to 320×320 JPEG, stored as data URL, ≤250KB cap, server-side validation).
+- Partial `PUT /api/profile` merges via `exclude_unset=True` so avatar/other fields are never wiped by unrelated updates.
 
 ## Prioritized backlog
 - P1: Barcode lookup + branded product enrichment (OpenFoodFacts / DailyMed).

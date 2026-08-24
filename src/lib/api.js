@@ -9,7 +9,13 @@ export async function request(path, options = {}) {
   return data;
 }
 export const auth = (path, body) => request(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-export async function submitScan({ file, text, productName, mode }) {
-  const form = new FormData(); if (file) form.append('file', file); if (text) form.append('text', text); form.append('product_name', productName); form.append('mode', mode);
+export async function submitScan({ file, text, productName, mode, barcode }) {
+  const form = new FormData();
+  if (file) form.append('file', file);
+  if (text) form.append('text', text);
+  if (barcode) form.append('barcode', barcode);
+  form.append('product_name', productName);
+  form.append('mode', mode);
   return request('/api/scan', { method: 'POST', body: form });
 }
+export const lookupBarcode = (code, mode) => request(`/api/barcode/${encodeURIComponent(code)}?mode=${encodeURIComponent(mode || 'AUTO')}`);

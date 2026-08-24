@@ -23,6 +23,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / "backend" / ".env")
 load_dotenv()  # also picks up default cwd .env if present
 
 from app.ai_analyzer import analyze_label  # noqa: E402
+from app.barcode_service import lookup_barcode  # noqa: E402
 from app.ocr_engine import extract_text_from_image  # noqa: E402
 
 MONGO_URL = os.environ["MONGO_URL"]
@@ -103,6 +104,7 @@ DEFAULT_PROFILE: dict[str, Any] = {
     "conditions": [],
     "medicines": [],
     "age": "",
+    "avatar": "",
 }
 
 
@@ -124,6 +126,10 @@ class ProfilePayload(BaseModel):
     conditions: list[str] = []
     medicines: list[str] = []
     age: str = ""
+    avatar: str = ""  # data-URL (image/*), client-downscaled to <150KB
+
+
+MAX_AVATAR_BYTES = 250_000  # ~250KB data-URL cap
 
 
 # ---------- routes ----------
@@ -194,13 +200,21 @@ async def read_profile(authorization: str | None = Header(None)):
 @app.put("/api/profile")
 async def save_profile(payload: ProfilePayload, authorization: str | None = Header(None)):
     user = await current_user(authorization)
-    data = payload.model_dump()
+    # Merge semantics: only update fields the client explicitly sent — avoids
+    # wiping the avatar (or any other field) when the client PUTs a partial body.
+    data = payload.model_dump(exclude_unset=True)
+    if "avatar" in data:
+        avatar = data["avatar"] or ""
+        if avatar and not avatar.startswith("data:image/"):
+            raise HTTPException(400, "Avatar must be an image data URL")
+        if len(avatar) > MAX_AVATAR_BYTES:
+            raise HTTPException(413, "Avatar image is too large — please crop or use a smaller photo")
     await profiles_col.update_one(
         {"user_id": user["id"]},
         {"$set": {**data, "user_id": user["id"], "updated_at": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
-    return data
+    return await get_profile(user["id"])
 
 
 @app.post("/api/scan")
@@ -209,6 +223,7 @@ async def scan_label(
     text: str | None = Form(None),
     product_name: str = Form("Scanned label"),
     mode: str = Form("FOOD"),
+    barcode: str | None = Form(None),
     authorization: str | None = Header(None),
 ):
     user = await current_user(authorization)
@@ -217,6 +232,21 @@ async def scan_label(
         mode_upper = "FOOD"
 
     captured = (text or "").strip()
+    effective_name = product_name
+    barcode_meta: dict[str, Any] | None = None
+    barcode_missed = False
+
+    if barcode:
+        barcode_meta = await lookup_barcode(barcode.strip(), mode_upper)
+        if barcode_meta:
+            mode_upper = barcode_meta.get("kind", mode_upper)
+            if not effective_name or effective_name == "Scanned label":
+                effective_name = barcode_meta.get("product_name") or effective_name
+            packed = barcode_meta.get("packed_text", "")
+            captured = f"{packed}\n{captured}".strip() if captured else packed
+        else:
+            barcode_missed = True
+
     if file:
         contents = await file.read()
         ocr_text = extract_text_from_image(contents)
@@ -224,15 +254,24 @@ async def scan_label(
             captured = ocr_text if not captured else f"{captured}\n{ocr_text}"
 
     if not captured:
-        raise HTTPException(400, "Add a label photo or paste the label text first")
+        if barcode_missed:
+            raise HTTPException(404, f"We couldn't find barcode {barcode} in the open catalog. Try capturing the label instead.")
+        raise HTTPException(400, "Add a label photo, barcode or paste the label text first")
 
     profile = await get_profile(user["id"])
     result = await analyze_label(
         extracted_text=captured,
         profile=profile,
         mode=mode_upper,
-        product_name=product_name,
+        product_name=effective_name,
     )
+    if barcode_meta:
+        result["barcode"] = {
+            "code": barcode.strip(),
+            "source": barcode_meta.get("source"),
+            "brand": barcode_meta.get("brand"),
+            "image_url": barcode_meta.get("image_url"),
+        }
 
     scan_id = new_id()
     stored = {
@@ -244,6 +283,15 @@ async def scan_label(
     await scans_col.insert_one(stored)
     stored.pop("_id", None)
     return stored
+
+
+@app.get("/api/barcode/{code}")
+async def barcode_lookup(code: str, mode: str = "AUTO", authorization: str | None = Header(None)):
+    await current_user(authorization)
+    result = await lookup_barcode(code, mode)
+    if not result:
+        raise HTTPException(404, "We couldn't find this barcode in the open catalog.")
+    return result
 
 
 @app.get("/api/history")
