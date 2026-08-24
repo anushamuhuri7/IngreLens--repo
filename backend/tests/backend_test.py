@@ -29,6 +29,41 @@ LLM_TIMEOUT = 120
 FOOD_LABEL = "Ingredients: Wheat flour, salt, sugar, peanut oil, MSG, sodium benzoate"
 MEDICINE_LABEL = "Paracetamol 500 mg, Active ingredient: acetaminophen, warnings: liver damage risk"
 
+PROFILE_PAYLOAD = {
+    "goals": ["low sodium"],
+    "allergies": ["peanut"],
+    "conditions": ["hypertension"],
+    "medicines": ["lisinopril"],
+    "age": "34",
+}
+
+REQUIRED_SCAN_KEYS = (
+    "id", "created_at", "type", "safety_score", "overall_verdict", "ingredients",
+    "profile_match", "summary_ai", "recommendations", "extracted_text",
+    "total_ingredients", "flagged_count", "product_name",
+)
+INGREDIENT_KEYS = ("name", "risk_level", "hazard_score", "category", "description", "side_effects")
+
+
+def _put_full_profile(api_client, headers):
+    put = api_client.put(f"{API}/profile", json=PROFILE_PAYLOAD, headers=headers, timeout=30)
+    assert put.status_code == 200, put.text[:300]
+    returned = put.json()
+    for key, value in PROFILE_PAYLOAD.items():
+        assert returned[key] == value
+    return returned
+
+
+def _get_profile(api_client, headers):
+    r = api_client.get(f"{API}/profile", headers=headers, timeout=30)
+    assert r.status_code == 200
+    return r.json()
+
+
+def _assert_profile_matches(body):
+    for key, value in PROFILE_PAYLOAD.items():
+        assert body[key] == value, f"{key} not persisted"
+
 
 def rand_email(tag: str = "user") -> str:
     return f"TEST_{tag}_{uuid.uuid4().hex[:10]}@ingrelens.test"
@@ -229,31 +264,32 @@ class TestProfile:
         }
 
     def test_profile_update_persists(self, api_client, scan_headers):
-        payload = {
-            "goals": ["low sodium"],
-            "allergies": ["peanut"],
-            "conditions": ["hypertension"],
-            "medicines": ["lisinopril"],
-            "age": "34",
-        }
-        put = api_client.put(f"{API}/profile", json=payload, headers=scan_headers, timeout=30)
-        assert put.status_code == 200, put.text[:300]
-        returned = put.json()
-        for key, value in payload.items():
-            assert returned[key] == value
+        _put_full_profile(api_client, scan_headers)
+        body = _get_profile(api_client, scan_headers)
+        _assert_profile_matches(body)
 
-        get = api_client.get(f"{API}/profile", headers=scan_headers, timeout=30)
-        assert get.status_code == 200
-        body = get.json()
-        assert body["allergies"] == ["peanut"]
-        assert body["conditions"] == ["hypertension"]
-        assert body["medicines"] == ["lisinopril"]
-        assert body["goals"] == ["low sodium"]
-        assert body["age"] == "34"
-        assert "_id" not in body and "user_id" not in body
+    def test_profile_get_after_put_excludes_internal_ids(self, api_client, scan_headers):
+        body = _get_profile(api_client, scan_headers)
+        assert "_id" not in body
+        assert "user_id" not in body
 
 
 # ---------- scan ----------
+@pytest.fixture(scope="module")
+def personalised_food_scan(api_client, scan_headers):
+    """Run the personalised food scan once and share the result across tests."""
+    profile = api_client.get(f"{API}/profile", headers=scan_headers, timeout=30).json()
+    assert profile["allergies"] == ["peanut"], "profile precondition missing"
+    r = api_client.post(
+        f"{API}/scan",
+        data={"text": FOOD_LABEL, "mode": "FOOD", "product_name": "TEST Snack"},
+        headers=scan_headers,
+        timeout=LLM_TIMEOUT,
+    )
+    assert r.status_code == 200, r.text[:400]
+    return r.json()
+
+
 class TestScan:
     def test_scan_requires_auth(self, api_client):
         r = api_client.post(f"{API}/scan", data={"text": FOOD_LABEL, "mode": "FOOD"}, timeout=30)
@@ -263,50 +299,39 @@ class TestScan:
         r = api_client.post(f"{API}/scan", data={"mode": "FOOD"}, headers=scan_headers, timeout=60)
         assert r.status_code == 400, r.text[:300]
 
-    def test_food_scan_shape_and_personalisation(self, api_client, scan_headers):
-        """Profile (peanut allergy, hypertension, lisinopril) already saved by TestProfile."""
-        profile = api_client.get(f"{API}/profile", headers=scan_headers, timeout=30).json()
-        assert profile["allergies"] == ["peanut"], "profile precondition missing"
+    def test_food_scan_has_all_required_keys(self, personalised_food_scan):
+        for key in REQUIRED_SCAN_KEYS:
+            assert key in personalised_food_scan, f"missing key {key}"
+        assert "_id" not in personalised_food_scan
 
-        r = api_client.post(
-            f"{API}/scan",
-            data={"text": FOOD_LABEL, "mode": "FOOD", "product_name": "TEST Snack"},
-            headers=scan_headers,
-            timeout=LLM_TIMEOUT,
-        )
-        assert r.status_code == 200, r.text[:400]
-        d = r.json()
+    def test_food_scan_type_and_extracted_text(self, personalised_food_scan):
+        assert personalised_food_scan["type"] == "FOOD"
+        assert personalised_food_scan["extracted_text"].strip().startswith("Ingredients:")
 
-        # structure
-        for key in (
-            "id", "created_at", "type", "safety_score", "overall_verdict", "ingredients",
-            "profile_match", "summary_ai", "recommendations", "extracted_text",
-            "total_ingredients", "flagged_count", "product_name",
-        ):
-            assert key in d, f"missing key {key}"
-        assert "_id" not in d
-        assert d["type"] == "FOOD"
-        assert d["extracted_text"].strip().startswith("Ingredients:")
+    def test_food_scan_score_and_ingredients_shape(self, personalised_food_scan):
+        d = personalised_food_scan
         assert 0 <= float(d["safety_score"]) <= 10
-        assert isinstance(d["ingredients"], list) and len(d["ingredients"]) >= 3, d["ingredients"]
+        assert isinstance(d["ingredients"], list) and len(d["ingredients"]) >= 3
         first = d["ingredients"][0]
-        for key in ("name", "risk_level", "hazard_score", "category", "description", "side_effects"):
+        for key in INGREDIENT_KEYS:
             assert key in first
         assert first["risk_level"] in {"Safe", "Caution", "Hazardous"}
+
+    def test_food_scan_uses_real_llm_not_fallback(self, personalised_food_scan):
+        d = personalised_food_scan
         assert d["summary_ai"].strip(), "summary_ai empty -> LLM fallback"
         assert len(d["recommendations"]) >= 2
         assert d["medicine_notice"] == ""
-
-        # AI fallback detection
-        assert "temporarily unavailable" not in d["summary_ai"], f"LLM fallback hit: {d['summary_ai']}"
+        assert "temporarily unavailable" not in d["summary_ai"]
         assert "not configured" not in d["summary_ai"]
 
-        # personalisation
-        matched = " ".join(d["profile_match"]).lower()
+    def test_food_scan_personalisation_reflects_profile(self, personalised_food_scan):
+        d = personalised_food_scan
         assert d["profile_match"], "profile_match empty despite peanut allergy in profile"
+        matched = " ".join(d["profile_match"]).lower()
         assert any(t in matched for t in ("peanut", "hypertension", "sodium", "salt", "lisinopril")), d["profile_match"]
-        assert float(d["safety_score"]) <= 5.0, f"score should drop for conflicting profile, got {d['safety_score']}"
-        assert d["overall_verdict"] in {"Avoid", "Personal caution", "Moderate Risk"}, d["overall_verdict"]
+        assert float(d["safety_score"]) <= 5.0
+        assert d["overall_verdict"] in {"Avoid", "Personal caution", "Moderate Risk"}
 
     def test_medicine_scan_returns_notice(self, api_client, scan_headers):
         r = api_client.post(
@@ -372,7 +397,7 @@ class TestHistory:
         d = api_client.delete(f"{API}/history", headers=scan_headers, timeout=30)
         assert d.status_code == 200
         body = d.json()
-        assert body["cleared"] is True
+        assert body["cleared"] == True  # noqa: E712 — explicit boolean check per code review
         assert body["removed"] == len(before), f"removed={body['removed']} vs {len(before)}"
 
         after = api_client.get(f"{API}/history", headers=scan_headers, timeout=30).json()
