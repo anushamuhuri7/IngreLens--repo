@@ -7,9 +7,8 @@ package-lock.json
 .env
 .env.local
 .env.*.local
-# Deployment requires these env files to be committed
+# frontend/.env is committed so Vite can read REACT_APP_ vars at build time
 !frontend/.env
-!backend/.env
 
 # Python / Backend
 venv/
@@ -38,7 +37,6 @@ credentials.json
 *.key
 .credentials
 
-# Deployment requires these env files to be committed — must come LAST
-# so they override every generic .env / *.env / .env.* pattern above.
+# frontend/.env is committed so Vite can read REACT_APP_ vars at build time — must
+# come LAST so it overrides every generic .env / *.env / .env.* pattern above.
 !frontend/.env
-!backend/.env
