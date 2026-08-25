@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="assets/logo.png" alt="IngreLens Logo" width="200"/>
 </p>
 
@@ -16,6 +16,22 @@
   <img src="https://img.shields.io/badge/Gemini-AI-4285F4?logo=google&logoColor=white" />
   <img src="https://img.shields.io/badge/Deployed%20on-Vercel-000000?logo=vercel&logoColor=white" />
 </p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/🏆%20DoraHacks%202.0-Built%20for%20DoraDAO%20Hackathon-FF6B35?style=for-the-badge" />
+</p>
+
+---
+
+## 👥 Team — Binary Brains
+
+Built with ❤️ at **DoraHacks 2.0** by **DoraDAO**
+
+| Member | Role |
+|--------|------|
+| 👩‍💻 **Anusha Muhuri** | Full-stack Development & Deployment |
+| 👩‍💻 **Trinanjana Datta** | Frontend Development & UI Design |
+| 👩‍💻 **Megha Mondal** | Backend Development & AI Integration |
 
 ---
 
@@ -162,4 +178,4 @@ IngreLens/
 
 ## 📄 License
 
-MIT © [Anusha Muhuri](https://github.com/anushamuhuri7)
+MIT © 2025 **Team Binary Brains** — Anusha Muhuri, Trinanjana Datta, Megha Mondal
