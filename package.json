@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/analytics": "^1.4.1",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "clsx": "^2.1.0",
